@@ -386,7 +386,7 @@ static void show_vma_header_prefix_fake(struct seq_file *m,
 }
 
 static void
-show_map_vma(struct seq_file *m, struct vm_area_struct *vma, int is_pid)
+show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 {
 	struct mm_struct *mm = vma->vm_mm;
 	struct file *file = vma->vm_file;
@@ -488,35 +488,18 @@ done:
 	seq_putc(m, '\n');
 }
 
-static int show_map(struct seq_file *m, void *v, int is_pid)
+static int show_map(struct seq_file *m, void *v)
 {
-	show_map_vma(m, v, is_pid);
+	show_map_vma(m, v);
 	m_cache_vma(m, v);
 	return 0;
-}
-
-static int show_pid_map(struct seq_file *m, void *v)
-{
-	return show_map(m, v, 1);
-}
-
-static int show_tid_map(struct seq_file *m, void *v)
-{
-	return show_map(m, v, 0);
 }
 
 static const struct seq_operations proc_pid_maps_op = {
 	.start	= m_start,
 	.next	= m_next,
 	.stop	= m_stop,
-	.show	= show_pid_map
-};
-
-static const struct seq_operations proc_tid_maps_op = {
-	.start	= m_start,
-	.next	= m_next,
-	.stop	= m_stop,
-	.show	= show_tid_map
+	.show	= show_map
 };
 
 static int pid_maps_open(struct inode *inode, struct file *file)
@@ -524,20 +507,8 @@ static int pid_maps_open(struct inode *inode, struct file *file)
 	return do_maps_open(inode, file, &proc_pid_maps_op);
 }
 
-static int tid_maps_open(struct inode *inode, struct file *file)
-{
-	return do_maps_open(inode, file, &proc_tid_maps_op);
-}
-
 const struct file_operations proc_pid_maps_operations = {
 	.open		= pid_maps_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= proc_map_release,
-};
-
-const struct file_operations proc_tid_maps_operations = {
-	.open		= tid_maps_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= proc_map_release,
@@ -855,13 +826,9 @@ static int smaps_hugetlb_range(pte_t *pte, unsigned long hmask,
 }
 #endif /* HUGETLB_PAGE */
 
-void __weak arch_show_smap(struct seq_file *m, struct vm_area_struct *vma)
-{
-}
-
 #define SEQ_PUT_DEC(str, val) \
 		seq_put_decimal_ull_width(m, str, (val) >> 10, 8)
-static int show_smap(struct seq_file *m, void *v, int is_pid)
+static int show_smap(struct seq_file *m, void *v)
 {
 	struct proc_maps_private *priv = m->private;
 	struct vm_area_struct *vma = v;
@@ -923,7 +890,7 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 	walk_page_vma(vma, &smaps_walk);
 
 	if (!rollup_mode) {
-		show_map_vma(m, vma, is_pid);
+		show_map_vma(m, vma);
 	} else if (last_vma) {
 		show_vma_header_prefix(
 			m, mss->first_vma_start, vma->vm_end, 0, 0, 0, 0);
@@ -977,28 +944,11 @@ static int show_smap(struct seq_file *m, void *v, int is_pid)
 }
 #undef SEQ_PUT_DEC
 
-static int show_pid_smap(struct seq_file *m, void *v)
-{
-	return show_smap(m, v, 1);
-}
-
-static int show_tid_smap(struct seq_file *m, void *v)
-{
-	return show_smap(m, v, 0);
-}
-
 static const struct seq_operations proc_pid_smaps_op = {
 	.start	= m_start,
 	.next	= m_next,
 	.stop	= m_stop,
-	.show	= show_pid_smap
-};
-
-static const struct seq_operations proc_tid_smaps_op = {
-	.start	= m_start,
-	.next	= m_next,
-	.stop	= m_stop,
-	.show	= show_tid_smap
+	.show	= show_smap
 };
 
 static int pid_smaps_open(struct inode *inode, struct file *file)
@@ -1025,11 +975,6 @@ static int pid_smaps_rollup_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int tid_smaps_open(struct inode *inode, struct file *file)
-{
-	return do_maps_open(inode, file, &proc_tid_smaps_op);
-}
-
 const struct file_operations proc_pid_smaps_operations = {
 	.open		= pid_smaps_open,
 	.read		= seq_read,
@@ -1039,80 +984,6 @@ const struct file_operations proc_pid_smaps_operations = {
 
 const struct file_operations proc_pid_smaps_rollup_operations = {
 	.open		= pid_smaps_rollup_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= proc_map_release,
-};
-
-static int proc_pid_smaps_simple_show(struct seq_file *m, void *v)
-{
-	struct pid *pid = (struct pid *)m->private;
-	struct task_struct *task;
-	struct mm_struct *mm;
-	struct vm_area_struct *vma;
-	struct mem_size_stats mss_total;
-	struct mem_size_stats mss;
-	int ret = 0;
-
-	struct mm_walk smaps_walk = {
-		.pmd_entry = smaps_pte_range,
-		.private = &mss,
-	};
-
-	task = get_pid_task(pid, PIDTYPE_PID);
-	if (!task) {
-		ret = -1;
-		goto error_task;
-	}
-
-	mm = mm_access(task, PTRACE_MODE_READ_FSCREDS);
-	if (!mm || IS_ERR(mm)) {
-		ret = -2;
-		goto error_mm;
-	}
-
-	memset(&mss_total, 0, sizeof mss_total);
-	down_read(&mm->mmap_sem);
-	vma = mm->mmap;
-	while (vma) {
-		memset(&mss, 0, sizeof mss);
-		smaps_walk.mm = vma->vm_mm;
-
-		walk_page_vma(vma, &smaps_walk);
-		mss_total.pss += mss.pss;
-		mss_total.swap_pss += mss.swap_pss;
-		vma = vma->vm_next;
-	}
-	up_read(&mm->mmap_sem);
-	mmput(mm);
-
-	seq_printf(m,
-		   "Pss:            %8lu kB\n"
-		   "SwapPss:        %8lu kB\n",
-		   (unsigned long)(mss_total.pss >> (10 + PSS_SHIFT)),
-		   (unsigned long)(mss_total.swap_pss >> (10 + PSS_SHIFT)));
-
-error_mm:
-	put_task_struct(task);
-
-error_task:
-	return 0;
-}
-
-static int proc_pid_smaps_simple_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, proc_pid_smaps_simple_show, proc_pid(inode));
-}
-
-const struct file_operations proc_pid_smaps_simple_operations = {
-	.open		= proc_pid_smaps_simple_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
-
-const struct file_operations proc_tid_smaps_operations = {
-	.open		= tid_smaps_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
 	.release	= proc_map_release,
@@ -2150,7 +2021,7 @@ static int gather_hugetlb_stats(pte_t *pte, unsigned long hmask,
 /*
  * Display pages allocated per node and memory policy via /proc.
  */
-static int show_numa_map(struct seq_file *m, void *v, int is_pid)
+static int show_numa_map(struct seq_file *m, void *v)
 {
 	struct numa_maps_private *numa_priv = m->private;
 	struct proc_maps_private *proc_priv = &numa_priv->proc_maps;
@@ -2234,45 +2105,17 @@ out:
 	return 0;
 }
 
-static int show_pid_numa_map(struct seq_file *m, void *v)
-{
-	return show_numa_map(m, v, 1);
-}
-
-static int show_tid_numa_map(struct seq_file *m, void *v)
-{
-	return show_numa_map(m, v, 0);
-}
-
 static const struct seq_operations proc_pid_numa_maps_op = {
 	.start  = m_start,
 	.next   = m_next,
 	.stop   = m_stop,
-	.show   = show_pid_numa_map,
+	.show   = show_numa_map,
 };
-
-static const struct seq_operations proc_tid_numa_maps_op = {
-	.start  = m_start,
-	.next   = m_next,
-	.stop   = m_stop,
-	.show   = show_tid_numa_map,
-};
-
-static int numa_maps_open(struct inode *inode, struct file *file,
-			  const struct seq_operations *ops)
-{
-	return proc_maps_open(inode, file, ops,
-				sizeof(struct numa_maps_private));
-}
 
 static int pid_numa_maps_open(struct inode *inode, struct file *file)
 {
-	return numa_maps_open(inode, file, &proc_pid_numa_maps_op);
-}
-
-static int tid_numa_maps_open(struct inode *inode, struct file *file)
-{
-	return numa_maps_open(inode, file, &proc_tid_numa_maps_op);
+	return proc_maps_open(inode, file, &proc_pid_numa_maps_op,
+				sizeof(struct numa_maps_private));
 }
 
 const struct file_operations proc_pid_numa_maps_operations = {
@@ -2282,10 +2125,4 @@ const struct file_operations proc_pid_numa_maps_operations = {
 	.release	= proc_map_release,
 };
 
-const struct file_operations proc_tid_numa_maps_operations = {
-	.open		= tid_numa_maps_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= proc_map_release,
-};
 #endif /* CONFIG_NUMA */
