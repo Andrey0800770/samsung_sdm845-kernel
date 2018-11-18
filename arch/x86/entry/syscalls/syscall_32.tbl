@@ -391,4 +391,3 @@
 382	i386	pkey_free		sys_pkey_free
 383	i386	statx			sys_statx
 424	i386	pidfd_send_signal	sys_pidfd_send_signal
-434	i386	pidfd_open		sys_pidfd_open
