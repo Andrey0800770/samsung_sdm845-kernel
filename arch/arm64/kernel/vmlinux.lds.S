@@ -122,7 +122,8 @@ SECTIONS
 		*(.discard)
 		*(.discard.*)
 		*(.interp .dynamic)
-		*(.dynsym .dynstr .hash)
+		*(.dynsym .dynstr .hash .gnu.hash)
+		*(.eh_frame)
 	}
 
 	. = KIMAGE_VADDR + TEXT_OFFSET;
@@ -224,14 +225,15 @@ SECTIONS
 	.altinstr_replacement : {
 		KEEP(*(.altinstr_replacement))
 	}
-	.rela : ALIGN(8) {
+	. = ALIGN(0x1000);
+	.rela.dyn : {
 		__reloc_start = .;
 		*(.rela .rela*)
 		__reloc_end = .;
 	}
 
-	__rela_offset	= ABSOLUTE(ADDR(.rela) - KIMAGE_VADDR);
-	__rela_size	= SIZEOF(.rela);
+	__rela_offset	= ABSOLUTE(ADDR(.rela.dyn) - KIMAGE_VADDR);
+	__rela_size	= SIZEOF(.rela.dyn);
 
 	. = ALIGN(SEGMENT_ALIGN);
 	__init_end = .;
