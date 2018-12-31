@@ -168,3 +168,10 @@ config SEC_DISPLAYPORT_LOGGER
 	depends on SEC_DISPLAYPORT
 	help
           Samsung specific displayport log changes.
+
+config EXPOSURE_ADJUSTMENT
+	bool "Enable exposure adjustment driver"
+	depends on DRM_MSM
+	help
+          The EXPOSURE ADJUSTMENT provides exposure adjustment function without change
+          panel hardware brightness to avoid PWM flicker on OLED devices.
