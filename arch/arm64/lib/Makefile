@@ -18,8 +18,13 @@ endif
 # patching of the bl instruction in the caller with an atomic instruction
 # when supported by the CPU. Result and argument registers are handled
 # correctly, based on the function prototype.
+ifeq ($(ld-name),lld)
+# https://bugs.llvm.org/show_bug.cgi?id=35841
+obj-$(CONFIG_ARM64_LSE_ATOMICS) += atomic_ll_sc.o
+else
 lib-$(CONFIG_ARM64_LSE_ATOMICS) += atomic_ll_sc.o
-CFLAGS_atomic_ll_sc.o	:= -ffixed-x1 -ffixed-x2        		\
+endif
+CFLAGS_atomic_ll_sc.o	:= -fcall-used-x0 -ffixed-x1 -ffixed-x2		\
 		   -ffixed-x3 -ffixed-x4 -ffixed-x5 -ffixed-x6		\
 		   -ffixed-x7 -fcall-saved-x8 -fcall-saved-x9		\
 		   -fcall-saved-x10 -fcall-saved-x11 -fcall-saved-x12	\
