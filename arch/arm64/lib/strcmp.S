@@ -60,20 +60,19 @@ tmp3		.req	x9
 zeroones	.req	x10
 pos		.req	x11
 
+	/* Start of performance-critical section  -- one 64B cache line.  */
 ENTRY(strcmp)
 	eor	tmp1, src1, src2
 	mov	zeroones, #REP8_01
 	tst	tmp1, #7
 	b.ne	.Lmisaligned8
 	ands	tmp1, src1, #7
-	b.ne	.Lmutual_align
-
-	/*
-	* NUL detection works on the principle that (X - 1) & (~X) & 0x80
-	* (=> (X - 1) & ~(X | 0x7f)) is non-zero iff a byte is zero, and
-	* can be done in parallel across the entire word.
-	*/
-.Lloop_aligned:
+	b.ne	L(mutual_align)
+.p2align 6
+	/* NUL detection works on the principle that (X - 1) & (~X) & 0x80
+	   (=> (X - 1) & ~(X | 0x7f)) is non-zero iff a byte is zero, and
+	   can be done in parallel across the entire word.  */
+L(loop_aligned):
 	ldr	data1, [src1], #8
 	ldr	data2, [src2], #8
 .Lstart_realigned:
