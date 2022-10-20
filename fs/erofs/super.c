@@ -380,6 +380,7 @@ static void erofs_default_options(struct erofs_sb_info *sbi)
 #ifdef CONFIG_EROFS_FS_ZIP
 	sbi->cache_strategy = EROFS_ZIP_CACHE_READAROUND;
 	sbi->max_sync_decompress_pages = 3;
+	sbi->readahead_sync_decompress = false;
 #endif
 #ifdef CONFIG_EROFS_FS_XATTR
 	set_opt(sbi, XATTR_USER);
@@ -550,7 +551,7 @@ static int erofs_fill_super(struct super_block *sb, void *data, int silent)
 	if (err)
 		return err;
 
-	sb->s_flags |= MS_RDONLY | MS_NOATIME;
+	sb->s_flags |= SB_RDONLY | SB_NOATIME;
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
 	sb->s_time_gran = 1;
 
@@ -565,13 +566,12 @@ static int erofs_fill_super(struct super_block *sb, void *data, int silent)
 		return err;
 
 	if (test_opt(sbi, POSIX_ACL))
-		sb->s_flags |= MS_POSIXACL;
+		sb->s_flags |= SB_POSIXACL;
 	else
-		sb->s_flags &= ~MS_POSIXACL;
+		sb->s_flags &= ~SB_POSIXACL;
 
 #ifdef CONFIG_EROFS_FS_ZIP
 	INIT_RADIX_TREE(&sbi->workstn_tree, GFP_ATOMIC);
-	spin_lock_init(&sbi->tree_lock);
 #endif
 
 	/* get the root inode */
@@ -757,17 +757,17 @@ static int erofs_remount(struct super_block *sb, int *flags, char *data)
 	unsigned int org_mnt_opt = sbi->mount_opt;
 	int err;
 
-	DBG_BUGON(!(sb->s_flags & MS_RDONLY));
+	DBG_BUGON(!sb_rdonly(sb));
 	err = erofs_parse_options(sb, data);
 	if (err)
 		goto out;
 
 	if (test_opt(sbi, POSIX_ACL))
-		sb->s_flags |= MS_POSIXACL;
+		sb->s_flags |= SB_POSIXACL;
 	else
-		sb->s_flags &= ~MS_POSIXACL;
+		sb->s_flags &= ~SB_POSIXACL;
 
-	*flags |= MS_RDONLY;
+	*flags |= SB_RDONLY;
 	return 0;
 out:
 	sbi->mount_opt = org_mnt_opt;

@@ -5,7 +5,6 @@
  */
 #include "zdata.h"
 #include "compress.h"
-#include <linux/overflow.h>
 #include <linux/prefetch.h>
 
 #include <trace/events/erofs.h>
@@ -97,9 +96,16 @@ static void z_erofs_free_pcluster(struct z_erofs_pcluster *pcl)
 	DBG_BUGON(1);
 }
 
+/*
+ * a compressed_pages[] placeholder in order to avoid
+ * being filled with file pages for in-place decompression.
+ */
+#define PAGE_UNALLOCATED     ((void *)0x5F0E4B1D)
+
 /* how to allocate cached pages for a pcluster */
 enum z_erofs_cache_alloctype {
 	DONTALLOC,	/* don't allocate any cached pages */
+	DELAYEDALLOC,	/* delayed allocation (at the time of submitting io) */
 	/*
 	 * try to use cached I/O if page allocation succeeds or fallback
 	 * to in-place I/O instead to avoid any direct reclaim.
@@ -136,16 +142,6 @@ static inline int z_erofs_init_workqueue(void)
 					    WQ_UNBOUND | WQ_HIGHPRI,
 					    onlinecpus + onlinecpus / 4);
 	return z_erofs_workqueue ? 0 : -ENOMEM;
-}
-
-static void z_erofs_pcluster_init_always(struct z_erofs_pcluster *pcl)
-{
-	struct z_erofs_collection *cl = z_erofs_primarycollection(pcl);
-
-	atomic_set(&pcl->obj.refcount, 1);
-
-	DBG_BUGON(cl->nr_pages);
-	DBG_BUGON(cl->vcnt);
 }
 
 int __init z_erofs_init_zip_subsystem(void)
@@ -271,6 +267,10 @@ static void preload_compressed_pages(struct z_erofs_collector *clt,
 			/* I/O is needed, no possible to decompress directly */
 			standalone = false;
 			switch (type) {
+			case DELAYEDALLOC:
+				t = tagptr_init(compressed_page_t,
+						PAGE_UNALLOCATED);
+				break;
 			case TRYALLOC:
 				newpage = erofs_allocpage(pagepool, gfp);
 				if (!newpage)
@@ -497,7 +497,7 @@ static int z_erofs_register_collection(struct z_erofs_collector *clt,
 	if (IS_ERR(pcl))
 		return PTR_ERR(pcl);
 
-	z_erofs_pcluster_init_always(pcl);
+	atomic_set(&pcl->obj.refcount, 1);
 	pcl->obj.index = map->m_pa >> PAGE_SHIFT;
 
 	pcl->length = (map->m_llen << Z_EROFS_PCLUSTER_LENGTH_BIT) |
@@ -521,7 +521,7 @@ static int z_erofs_register_collection(struct z_erofs_collector *clt,
 	 * and mutex_trylock *never* fails for a new pcluster.
 	 */
 	mutex_init(&cl->lock);
-	mutex_trylock(&cl->lock);
+	DBG_BUGON(!mutex_trylock(&cl->lock));
 
 	err = erofs_register_workgroup(inode->i_sb, &pcl->obj);
 	if (err) {
@@ -714,9 +714,11 @@ hitted:
 	tight &= (clt->mode >= COLLECT_PRIMARY_HOOKED &&
 		  clt->mode != COLLECT_PRIMARY_FOLLOWED_NOINPLACE);
 
-	cur = end - min_t(unsigned int, offset + end - map->m_la, end);
+	cur = end - min_t(erofs_off_t, offset + end - map->m_la, end);
 	if (!(map->m_flags & EROFS_MAP_MAPPED)) {
 		zero_user_segment(page, cur, end);
+		++spiltted;
+		tight = false;
 		goto next_part;
 	}
 
@@ -780,19 +782,25 @@ static void z_erofs_decompressqueue_work(struct work_struct *work);
 static void z_erofs_decompress_kickoff(struct z_erofs_decompressqueue *io,
 				       bool sync, int bios)
 {
+	struct erofs_sb_info *const sbi = EROFS_SB(io->sb);
+
 	/* wake up the caller thread for sync decompression */
 	if (sync) {
-		if (!atomic_add_return(bios, &io->pending_bios))
-			complete(&io->u.done);
+		unsigned long flags;
 
+		spin_lock_irqsave(&io->u.wait.lock, flags);
+		if (!atomic_add_return(bios, &io->pending_bios))
+			wake_up_locked(&io->u.wait);
+		spin_unlock_irqrestore(&io->u.wait.lock, flags);
 		return;
 	}
 
 	if (atomic_add_return(bios, &io->pending_bios))
 		return;
-	/* Use workqueue decompression for atomic contexts only */
+	/* Use workqueue and sync decompression for atomic contexts only */
 	if (in_atomic() || irqs_disabled()) {
 		queue_work(z_erofs_workqueue, &io->u.work);
+		sbi->readahead_sync_decompress = true;
 		return;
 	}
 	z_erofs_decompressqueue_work(&io->u.work);
@@ -807,6 +815,7 @@ static void z_erofs_decompressqueue_endio(struct bio *bio)
 {
 	tagptr1_t t = tagptr_init(tagptr1_t, bio->bi_private);
 	struct z_erofs_decompressqueue *q = tagptr_unfold_ptr(t);
+	blk_status_t err = bio->bi_status;
 	struct bio_vec *bvec;
 	unsigned int i;
 
@@ -816,11 +825,11 @@ static void z_erofs_decompressqueue_endio(struct bio *bio)
 		DBG_BUGON(PageUptodate(page));
 		DBG_BUGON(z_erofs_page_is_invalidated(page));
 
-		if (bio->bi_error)
+		if (err)
 			SetPageError(page);
 
 		if (erofs_page_is_managed(EROFS_SB(q->sb), page)) {
-			if (!bio->bi_error)
+			if (!err)
 				SetPageUptodate(page);
 			unlock_page(page);
 		}
@@ -862,7 +871,7 @@ static int z_erofs_decompress_pcluster(struct super_block *sb,
 		if (nr_pages > Z_EROFS_VMAP_GLOBAL_PAGES)
 			gfp_flags |= __GFP_NOFAIL;
 
-		pages = kmalloc_array(nr_pages, sizeof(struct page *),
+		pages = kvmalloc_array(nr_pages, sizeof(struct page *),
 				       gfp_flags);
 
 		/* fallback to global pagemap for the lowmem scenario */
@@ -1086,6 +1095,15 @@ repeat:
 	if (!page)
 		goto out_allocpage;
 
+	/*
+	 * the cached page has not been allocated and
+	 * an placeholder is out there, prepare it now.
+	 */
+	if (page == PAGE_UNALLOCATED) {
+		tocache = true;
+		goto out_allocpage;
+	}
+
 	/* process the target tagged pointer */
 	t = tagptr_init(compressed_page_t, page);
 	justfound = tagptr_unfold_tags(t);
@@ -1183,7 +1201,7 @@ jobqueue_init(struct super_block *sb,
 	struct z_erofs_decompressqueue *q;
 
 	if (fg && !*fg) {
-		q = kzalloc(sizeof(*q), GFP_KERNEL | __GFP_NOWARN);
+		q = kvzalloc(sizeof(*q), GFP_KERNEL | __GFP_NOWARN);
 		if (!q) {
 			*fg = true;
 			goto fg_out;
@@ -1192,7 +1210,7 @@ jobqueue_init(struct super_block *sb,
 	} else {
 fg_out:
 		q = fgq;
-		init_completion(&fgq->u.done);
+		init_waitqueue_head(&fgq->u.wait);
 		atomic_set(&fgq->pending_bios, 0);
 	}
 	q->sb = sb;
@@ -1301,7 +1319,7 @@ submit_bio_retry:
 				bio = bio_alloc(GFP_NOIO, BIO_MAX_PAGES);
 
 				bio->bi_end_io = z_erofs_decompressqueue_endio;
-				bio->bi_bdev = sb->s_bdev;
+				bio_set_dev(bio, sb->s_bdev);
 				bio->bi_iter.bi_sector = (sector_t)cur <<
 					LOG_SECTORS_PER_BLOCK;
 				bio->bi_private = bi_private;
@@ -1355,7 +1373,8 @@ static void z_erofs_runqueue(struct super_block *sb,
 		return;
 
 	/* wait until all bios are completed */
-	wait_for_completion_io(&io[JQ_SUBMIT].u.done);
+	io_wait_event(io[JQ_SUBMIT].u.wait,
+		      !atomic_read(&io[JQ_SUBMIT].pending_bios));
 
 	/* handle synchronous decompress queue in the caller context */
 	z_erofs_decompress_queue(&io[JQ_SUBMIT], pagepool);
@@ -1395,7 +1414,8 @@ static int z_erofs_readpages(struct file *filp, struct address_space *mapping,
 	struct inode *const inode = mapping->host;
 	struct erofs_sb_info *const sbi = EROFS_I_SB(inode);
 
-	bool sync = (nr_pages <= sbi->max_sync_decompress_pages);
+	bool sync = (sbi->readahead_sync_decompress &&
+			nr_pages <= sbi->max_sync_decompress_pages);
 	struct z_erofs_decompress_frontend f = DECOMPRESS_FRONTEND_INIT(inode);
 	gfp_t gfp = mapping_gfp_constraint(mapping, GFP_KERNEL);
 	struct page *head = NULL;

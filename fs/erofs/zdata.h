@@ -89,7 +89,7 @@ struct z_erofs_decompressqueue {
 	z_erofs_next_pcluster_t head;
 
 	union {
-		struct completion done;
+		wait_queue_head_t wait;
 		struct work_struct work;
 	} u;
 };
@@ -186,3 +186,4 @@ static inline void z_erofs_onlinepage_endio(struct page *page)
 #define Z_EROFS_VMAP_GLOBAL_PAGES	2048
 
 #endif
+
