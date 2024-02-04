@@ -451,7 +451,7 @@ void sde_connector_schedule_status_work(struct drm_connector *connector,
 					STATUS_CHECK_INTERVAL_MS;
 #if !defined(CONFIG_DISPLAY_SAMSUNG)
 			/* Schedule ESD status check */
-			schedule_delayed_work(&c_conn->status_work,
+			queue_delayed_work(system_power_efficient_wq, &c_conn->status_work,
 				msecs_to_jiffies(interval));
 #endif
 			c_conn->esd_status_check = true;
@@ -1942,7 +1942,7 @@ static void sde_connector_check_status_work(struct work_struct *work)
 		interval = conn->esd_status_interval ?
 			conn->esd_status_interval : STATUS_CHECK_INTERVAL_MS;
 #if !defined(CONFIG_DISPLAY_SAMSUNG)
-		schedule_delayed_work(&conn->status_work,
+		queue_delayed_work(system_power_efficient_wq, &conn->status_work,
 			msecs_to_jiffies(interval));
 #endif
 		return;
