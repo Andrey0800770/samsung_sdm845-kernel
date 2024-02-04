@@ -36,3 +36,4 @@ CFLAGS_elevator.o = -Wformat
 CFLAGS_cfq-iosched.o = -Wformat
 CFLAGS_genhd.o = -Wformat
 
+obj-$(CONFIG_IOSCHED_ANXIETY)	+= anxiety-iosched.o
