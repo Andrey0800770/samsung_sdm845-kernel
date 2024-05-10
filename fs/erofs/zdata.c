@@ -6,6 +6,7 @@
 #include "zdata.h"
 #include "compress.h"
 #include <linux/prefetch.h>
+#include <linux/overflow.h>
 
 #include <trace/events/erofs.h>
 
@@ -712,11 +713,9 @@ hitted:
 	tight &= (clt->mode >= COLLECT_PRIMARY_HOOKED &&
 		  clt->mode != COLLECT_PRIMARY_FOLLOWED_NOINPLACE);
 
-	cur = end - min_t(erofs_off_t, offset + end - map->m_la, end);
+	cur = end - min_t(unsigned int, offset + end - map->m_la, end);
 	if (!(map->m_flags & EROFS_MAP_MAPPED)) {
 		zero_user_segment(page, cur, end);
-		++spiltted;
-		tight = false;
 		goto next_part;
 	}
 
