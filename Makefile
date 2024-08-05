@@ -812,6 +812,17 @@ KBUILD_AFLAGS += -march=armv8-a+crc+crypto -mcpu=cortex-a75 -mtune=cortex-a55
 KBUILD_CFLAGS  += -ftrivial-auto-var-init=zero
 KBUILD_CFLAGS  += $(call cc-option, -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang)
 
+ifdef CONFIG_LLVM_POLLY
+KBUILD_CFLAGS	+= -mllvm -polly \
+		   -mllvm -polly-run-dce \
+		   -mllvm -polly-run-inliner \
+		   -mllvm -polly-ast-use-context \
+		   -mllvm -polly-detect-keep-going \
+		   -mllvm -polly-vectorizer=stripmine \
+		   -mllvm -polly-invariant-load-hoisting \
+		   -mllvm -polly-isl-arg=--no-schedule-serialize-sccs
+endif
+
 ifdef CONFIG_LLVM_MLGO_REGISTER
 # Enable MLGO for register allocation. default, release, development
 KBUILD_CFLAGS	+= -mllvm -regalloc-enable-advisor=release \
