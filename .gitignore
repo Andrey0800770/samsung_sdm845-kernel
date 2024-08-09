@@ -151,4 +151,7 @@ net/wireguard/crypto/zinc/poly1305/poly1305-arm64.S
 scripts/dtbtool_exynos/dtbtool
 
 # KSU
-drivers/kernelsu/*
+drivers/kernelsu
+
+# Toolchain
+toolchain/*
