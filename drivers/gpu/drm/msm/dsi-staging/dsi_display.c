@@ -5259,6 +5259,10 @@ int dsi_display_dev_remove(struct platform_device *pdev)
 	}
 
 	display = platform_get_drvdata(pdev);
+	if (!display) {
+		pr_err("invalid display\n");
+		return -EINVAL;
+	}
 
 	(void)_dsi_display_dev_deinit(display);
 
