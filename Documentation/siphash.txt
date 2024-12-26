@@ -99,7 +99,6 @@ u64 h = siphash(&combined, offsetofend(typeof(combined), dport), &secret);
 Read the SipHash paper if you're interested in learning more:
 https://131002.net/siphash/siphash.pdf
 
-
 ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~
 
 HalfSipHash - SipHash's insecure younger cousin

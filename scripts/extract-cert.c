@@ -30,7 +30,6 @@
  */
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-
 #define PKEY_ID_PKCS7 2
 
 static __attribute__((noreturn))

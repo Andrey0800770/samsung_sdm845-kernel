@@ -657,6 +657,10 @@ static int rndis_set_response(struct rndis_params *params,
 
 	BufLength = le32_to_cpu(buf->InformationBufferLength);
 	BufOffset = le32_to_cpu(buf->InformationBufferOffset);
+	if ((BufLength > RNDIS_MAX_TOTAL_SIZE) ||
+            (BufOffset > RNDIS_MAX_TOTAL_SIZE) ||
+            (BufOffset + 8 >= RNDIS_MAX_TOTAL_SIZE))
+                    return -EINVAL;
 
 #ifdef	VERBOSE_DEBUG
 	pr_debug("%s: Length: %d\n", __func__, BufLength);

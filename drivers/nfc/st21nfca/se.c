@@ -333,10 +333,27 @@ int st21nfca_connectivity_event_received(struct nfc_hci_dev *hdev, u8 host,
 
 		transaction = (struct nfc_evt_transaction *)devm_kzalloc(dev,
 						   skb->len - 2, GFP_KERNEL);
+		if (!transaction)
+			return -ENOMEM;
 
 		transaction->aid_len = skb->data[1];
+
+		/* Checking if the length of the AID is valid */
+		if (transaction->aid_len > sizeof(transaction->aid)) {
+			devm_kfree(dev, transaction);
+			return -EINVAL;
+		}
+
 		memcpy(transaction->aid, &skb->data[2],
 		       transaction->aid_len);
+
+		/* Check next byte is PARAMETERS tag (82) */
+		if (skb->data[transaction->aid_len + 2] !=
+		    NFC_EVT_TRANSACTION_PARAMS_TAG) {
+			devm_kfree(dev, transaction);
+			return -EPROTO;
+		}
+
 		transaction->params_len = skb->data[transaction->aid_len + 3];
 
 		/* Check next byte is PARAMETERS tag (82) and the length field */
@@ -345,6 +362,12 @@ int st21nfca_connectivity_event_received(struct nfc_hci_dev *hdev, u8 host,
 		    skb->len < transaction->aid_len + transaction->params_len + 4) {
 			devm_kfree(dev, transaction);
 			return -EPROTO;
+		}
+		/* Total size is allocated (skb->len - 2) minus fixed array members */
+		if (transaction->params_len > ((skb->len - 2) -
+		    sizeof(struct nfc_evt_transaction))) {
+			devm_kfree(dev, transaction);
+			return -EINVAL;
 		}
 
 		memcpy(transaction->params, skb->data +

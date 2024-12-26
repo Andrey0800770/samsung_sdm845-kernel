@@ -882,6 +882,7 @@ static int avc_update_node(u32 event, u32 perms, u8 driver, u8 xperm, u32 ssid,
 //			kmem_cache_free(avc_node_cachep, node);
 			avc_node_kill(node);
 //]SEC_SELINUX_PORTING_COMMON
+
 			goto out_unlock;
 		}
 	}

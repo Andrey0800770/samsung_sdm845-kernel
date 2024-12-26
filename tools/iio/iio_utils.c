@@ -159,9 +159,9 @@ int iioutils_get_type(unsigned *is_signed, unsigned *bytes, unsigned *bits_used,
 			*be = (endianchar == 'b');
 			*bytes = padint / 8;
 			if (*bits_used == 64)
-				*mask = ~0;
+				*mask = ~(0ULL);
 			else
-				*mask = (1ULL << *bits_used) - 1;
+				*mask = (1ULL << *bits_used) - 1ULL;
 
 			*is_signed = (signchar == 's');
 			if (fclose(sysfsfp)) {
@@ -545,6 +545,10 @@ error_free_name:
 static int calc_digits(int num)
 {
 	int count = 0;
+
+	/* It takes a digit to represent zero */
+	if (!num)
+		return 1;
 
 	while (num != 0) {
 		num /= 10;
