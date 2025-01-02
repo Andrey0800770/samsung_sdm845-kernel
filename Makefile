@@ -765,6 +765,13 @@ KBUILD_AFLAGS += -mcpu=cortex-a75.cortex-a55 -mtune=cortex-a55 -funroll-loops
 else ifeq ($(cc-name),clang)
 KBUILD_CFLAGS += -mcpu=cortex-a75+crypto -mtune=cortex-a55 -funroll-loops -fno-plt -fno-semantic-interposition -march=armv8-a+simd
 KBUILD_AFLAGS += -mcpu=cortex-a75+crypto -mtune=cortex-a55 -funroll-loops -fno-plt -fno-semantic-interposition -march=armv8-a+simd
+
+# Initialize all stack variables with a zero value.
+# Future support for zero initialization is still being debated, see
+# https://bugs.llvm.org/show_bug.cgi?id=45497. These flags are subject to being
+# renamed or dropped.
+KBUILD_CFLAGS  += -ftrivial-auto-var-init=zero
+KBUILD_CFLAGS  += $(call cc-option, -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang)
 endif
 
 # Tell gcc to never replace conditional load with a non-conditional one
