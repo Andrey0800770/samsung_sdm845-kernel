@@ -35,6 +35,8 @@
 
 #include "zram_drv.h"
 
+#define ZRAM_SIZE (4 * 1024 * 1024 * 1024) // 4GB
+
 static DEFINE_IDR(zram_index_idr);
 /* idr index must be protected */
 static DEFINE_MUTEX(zram_index_mutex);
@@ -2130,7 +2132,7 @@ static int __init zram_init(void)
 
 	while (num_devices != 0) {
 		mutex_lock(&zram_index_mutex);
-		ret = zram_add();
+		ret = zram_add(ZRAM_SIZE);
 		mutex_unlock(&zram_index_mutex);
 		if (ret < 0)
 			goto out_error;
