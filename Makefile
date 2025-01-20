@@ -760,11 +760,11 @@ endif
 
 # Specifies that the code should be optimized for the selected cores
 ifeq ($(cc-name),gcc)
-KBUILD_CFLAGS += -mcpu=cortex-a75.cortex-a55 -mtune=cortex-a55 -funroll-loops
-KBUILD_AFLAGS += -mcpu=cortex-a75.cortex-a55 -mtune=cortex-a55 -funroll-loops
+KBUILD_CFLAGS += -mcpu=cortex-a75+crypto -mtune=cortex-a55 -march=armv8-a
+KBUILD_AFLAGS += -mcpu=cortex-a75+crypto -mtune=cortex-a55 -march=armv8-a
 else ifeq ($(cc-name),clang)
-KBUILD_CFLAGS += -mcpu=cortex-a75+crypto -mtune=cortex-a55 -funroll-loops -fno-plt -fno-semantic-interposition -march=armv8-a+simd
-KBUILD_AFLAGS += -mcpu=cortex-a75+crypto -mtune=cortex-a55 -funroll-loops -fno-plt -fno-semantic-interposition -march=armv8-a+simd
+KBUILD_CFLAGS += -mcpu=cortex-a75+crypto -mtune=cortex-a55 -march=armv8-a
+KBUILD_AFLAGS += -mcpu=cortex-a75+crypto -mtune=cortex-a55 -march=armv8-a
 
 # Initialize all stack variables with a zero value.
 # Future support for zero initialization is still being debated, see
