@@ -2132,7 +2132,7 @@ static int __init zram_init(void)
 
 	while (num_devices != 0) {
 		mutex_lock(&zram_index_mutex);
-		ret = zram_add(ZRAM_SIZE);
+		ret = zram_add();
 		mutex_unlock(&zram_index_mutex);
 		if (ret < 0)
 			goto out_error;
