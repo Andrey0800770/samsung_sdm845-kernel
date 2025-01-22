@@ -35,8 +35,6 @@
 
 #include "zram_drv.h"
 
-#define ZRAM_SIZE (4 * 1024 * 1024 * 1024) // 4GB
-
 static DEFINE_IDR(zram_index_idr);
 /* idr index must be protected */
 static DEFINE_MUTEX(zram_index_mutex);
