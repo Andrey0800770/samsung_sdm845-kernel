@@ -112,7 +112,7 @@ void __init __weak defex_load_rules(void) { }
 #endif
 
 #ifdef CONFIG_ZRAM
-#include <linux/zram.h>
+#include <drivers/block/zram/zram_drv.h>
 
 static void __init init_zram(void)
 {
@@ -126,7 +126,7 @@ static void __init init_zram(void)
         return;
     }
 
-    // Defina o tamanho do zram (por exemplo, 512MB)
+    // Defina o tamanho do zram (por exemplo, 4GB)
     ret = zram_set_size(zram, 4048 * 1024 * 1024);
     if (ret) {
         pr_err("Failed to set zram size\n");
