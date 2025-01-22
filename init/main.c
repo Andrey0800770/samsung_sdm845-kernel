@@ -111,6 +111,39 @@
 void __init __weak defex_load_rules(void) { }
 #endif
 
+#ifdef CONFIG_ZRAM
+#include <linux/zram.h>
+
+static void __init init_zram(void)
+{
+    struct zram *zram;
+    int ret;
+
+    // Configurações do zram
+    zram = zram_init();
+    if (IS_ERR(zram)) {
+        pr_err("Failed to initialize zram\n");
+        return;
+    }
+
+    // Defina o tamanho do zram (por exemplo, 512MB)
+    ret = zram_set_size(zram, 4048 * 1024 * 1024);
+    if (ret) {
+        pr_err("Failed to set zram size\n");
+        return;
+    }
+
+    // Ative o zram
+    ret = zram_enable(zram);
+    if (ret) {
+        pr_err("Failed to enable zram\n");
+        return;
+    }
+
+    pr_info("zram initialized successfully\n");
+}
+#endif
+
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
@@ -760,7 +793,9 @@ asmlinkage __visible void __init start_kernel(void)
 
 	build_all_zonelists(NULL, NULL, false);
 	page_alloc_init();
-
+#ifdef CONFIG_ZRAM
+	init_zram();
+#endif
 #ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
 	pr_notice("Kernel command line: %s\n", boot_command_line);
 #else
