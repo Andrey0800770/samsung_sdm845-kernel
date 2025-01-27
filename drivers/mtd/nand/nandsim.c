@@ -1411,7 +1411,7 @@ static ssize_t write_file(struct nandsim *ns, struct file *file, void *buf, size
 	if (err)
 		return err;
 	memalloc = set_memalloc();
-	tx = kernel_write(file, buf, count, pos);
+	tx = kernel_write(file, buf, count, &pos);
 	clear_memalloc(memalloc);
 	put_pages(ns);
 	return tx;

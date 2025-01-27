@@ -22286,19 +22286,11 @@ void wifi_plat_dev_drv_shutdown(struct platform_device *pdev)
 }
 #endif /* DHD_WIFI_SHUTDOWN */
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0))
 int
 compat_kernel_read(struct file *file, loff_t offset, char *addr, unsigned long count)
 {
 	return (int)kernel_read(file, addr, (size_t)count, &offset);
 }
-#else
-int
-compat_kernel_read(struct file *file, loff_t offset, char *addr, unsigned long count)
-{
-	return kernel_read(file, offset, addr, count);
-}
-#endif /* (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)) */
 
 #ifdef DHDTCPSYNC_FLOOD_BLK
 static void dhd_blk_tsfl_handler(struct work_struct * work)
