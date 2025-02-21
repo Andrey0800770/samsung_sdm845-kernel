@@ -1641,6 +1641,7 @@ bool udp_sk_rx_dst_set(struct sock *sk, struct dst_entry *dst)
 	dst_hold(dst);
 	old = xchg((__force struct dst_entry **)&sk->sk_rx_dst, dst);
 	dst_release(old);
+	return true;
 }
 EXPORT_SYMBOL(udp_sk_rx_dst_set);
 
