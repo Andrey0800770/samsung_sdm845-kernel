@@ -51,6 +51,8 @@
 
 #define MAX_BUFFER_SIZE	1024
 
+static char event_log_buffer[MAX_BUFFER_SIZE];
+
 struct ss_pmsg_log_header_t {
 	uint8_t magic;
 	uint16_t len;
@@ -515,7 +517,6 @@ static const char *find_tag_name_from_id(int id)
 static off_t parse_buffer(char *buffer, unsigned char type, off_t pos)
 {
 	int buf_len;
-	char buf[MAX_BUFFER_SIZE] = { '\0', };
 	off_t next = pos;
 
 	switch (type) {
@@ -524,8 +525,8 @@ static off_t parse_buffer(char *buffer, unsigned char type, off_t pos)
 		int val = get_unaligned((int *)&buffer[pos]);
 
 		next += sizeof(int);
-		buf_len = scnprintf(buf, MAX_BUFFER_SIZE, "%d", val);
-		logger.func_hook_logger(buf, buf_len);
+		buf_len = scnprintf(event_log_buffer, MAX_BUFFER_SIZE, "%d", val);
+		logger.func_hook_logger(event_log_buffer, buf_len);
 	}
 	break;
 	case EVENT_TYPE_LONG:
@@ -533,8 +534,8 @@ static off_t parse_buffer(char *buffer, unsigned char type, off_t pos)
 		long long val = get_unaligned((long long *)&buffer[pos]);
 
 		next += sizeof(long long);
-		buf_len = scnprintf(buf, MAX_BUFFER_SIZE, "%lld", val);
-		logger.func_hook_logger(buf, buf_len);
+		buf_len = scnprintf(event_log_buffer, MAX_BUFFER_SIZE, "%lld", val);
+		logger.func_hook_logger(event_log_buffer, buf_len);
 	}
 	break;
 	case EVENT_TYPE_FLOAT:
@@ -551,8 +552,8 @@ static off_t parse_buffer(char *buffer, unsigned char type, off_t pos)
 		pos += sizeof(unsigned int);
 		next += sizeof(unsigned int) + len;
 
-		memcpy(buf, &buffer[pos], len_to_copy);
-		logger.func_hook_logger(buf, len_to_copy);
+		memcpy(event_log_buffer, &buffer[pos], len_to_copy);
+		logger.func_hook_logger(event_log_buffer, len_to_copy);
 	}
 	break;
 	}
@@ -614,14 +615,13 @@ static inline void __ss_logger_level_text_event_log(char *buffer, size_t count)
 {
 #ifdef CONFIG_SEC_EVENT_LOG
 	int buf_len;
-	char buf[MAX_BUFFER_SIZE] = { '\0', };
 	unsigned int tag_id = *(unsigned int *)buffer;
 	const char *tag_name;
 
 	tag_name = find_tag_name_from_id(tag_id);
 	if (count == 4 && tag_name) {
-		buf_len = scnprintf(buf, MAX_BUFFER_SIZE, "# %s", tag_name);
-		logger.func_hook_logger(buf, buf_len);
+		buf_len = scnprintf(event_log_buffer, MAX_BUFFER_SIZE, "# %s", tag_name);
+		logger.func_hook_logger(event_log_buffer, buf_len);
 	} else {
 		if (*buffer == EVENT_TYPE_LONG ||
 		    *buffer == EVENT_TYPE_INT ||
