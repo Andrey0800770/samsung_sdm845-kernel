@@ -968,109 +968,147 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		break;
 #if defined(CONFIG_BATTERY_CISD)
 	case CISD_DATA:
-		{
-			struct cisd *pcisd = &battery->cisd;
-			char temp_buf[1024] = {0,};
-			int j = 0;
+	    {
+	        struct cisd *pcisd = &battery->cisd;
+	        char *temp_buf = kmalloc(1024, GFP_KERNEL);
+	        int j = 0;
 
-			sprintf(temp_buf+strlen(temp_buf), "%d", pcisd->data[CISD_DATA_RESET_ALG]);
-			for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX_PER_DAY; j++)
-				sprintf(temp_buf+strlen(temp_buf), " %d", pcisd->data[j]);
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
-		}
-		break;
+	        if (!temp_buf) {
+	            pr_err("%s: Failed to allocate temp_buf for CISD_DATA\n", __func__);
+	            i = -ENOMEM;
+	            break;
+	        }
+
+	        sprintf(temp_buf, "%d", pcisd->data[CISD_DATA_RESET_ALG]);
+	        for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX_PER_DAY; j++)
+	            sprintf(temp_buf + strlen(temp_buf), " %d", pcisd->data[j]);
+	        i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
+
+	        kfree(temp_buf);
+	    }
+	    break;
+
 	case CISD_DATA_JSON:
-		{
-			struct cisd *pcisd = &battery->cisd;
-			char temp_buf[1920] = {0,};
-			int j = 0;
+	    {
+	        struct cisd *pcisd = &battery->cisd;
+	        char *temp_buf = kmalloc(1920, GFP_KERNEL);
+	        int j = 0;
 
-			sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
-					cisd_data_str[CISD_DATA_RESET_ALG], pcisd->data[CISD_DATA_RESET_ALG]);
-			for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX; j++)
-				sprintf(temp_buf+strlen(temp_buf), ",\"%s\":\"%d\"", cisd_data_str[j], pcisd->data[j]);
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
-		}
-		break;
+	        if (!temp_buf) {
+	            pr_err("%s: Failed to allocate temp_buf for CISD_DATA_JSON\n", __func__);
+	            i = -ENOMEM;
+	            break;
+	        }
+
+	        sprintf(temp_buf, "\"%s\":\"%d\"",
+	                cisd_data_str[CISD_DATA_RESET_ALG], pcisd->data[CISD_DATA_RESET_ALG]);
+	        for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX; j++)
+	            sprintf(temp_buf + strlen(temp_buf), ",\"%s\":\"%d\"",
+	                cisd_data_str[j], pcisd->data[j]);
+	        i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
+
+	        kfree(temp_buf);
+	    }
+	    break;
+
 	case CISD_DATA_D_JSON:
-		{
-			struct cisd *pcisd = &battery->cisd;
-			char temp_buf[1920] = {0,};
-			int j = 0;
+	    {
+	        struct cisd *pcisd = &battery->cisd;
+	        char *temp_buf = kmalloc(1920, GFP_KERNEL);
+	        int j = 0;
 
-			sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
-				cisd_data_str_d[CISD_DATA_FULL_COUNT_PER_DAY-CISD_DATA_MAX],
-				pcisd->data[CISD_DATA_FULL_COUNT_PER_DAY]);
-			for (j = CISD_DATA_FULL_COUNT_PER_DAY + 1; j < CISD_DATA_MAX_PER_DAY; j++) {
-				sprintf(temp_buf+strlen(temp_buf), ",\"%s\":\"%d\"",
-				cisd_data_str_d[j-CISD_DATA_MAX], pcisd->data[j]);
-			}
+	        if (!temp_buf) {
+	            pr_err("%s: Failed to allocate temp_buf for CISD_DATA_D_JSON\n", __func__);
+	            i = -ENOMEM;
+	            break;
+	        }
 
-			/* Clear Daily Data */
-			for (j = CISD_DATA_FULL_COUNT_PER_DAY; j < CISD_DATA_MAX_PER_DAY; j++)
-				pcisd->data[j] = 0;
+	        sprintf(temp_buf, "\"%s\":\"%d\"",
+	            cisd_data_str_d[CISD_DATA_FULL_COUNT_PER_DAY - CISD_DATA_MAX],
+	            pcisd->data[CISD_DATA_FULL_COUNT_PER_DAY]);
+	        for (j = CISD_DATA_FULL_COUNT_PER_DAY + 1; j < CISD_DATA_MAX_PER_DAY; j++) {
+	            sprintf(temp_buf + strlen(temp_buf), ",\"%s\":\"%d\"",
+	                cisd_data_str_d[j - CISD_DATA_MAX], pcisd->data[j]);
+	        }
 
-			pcisd->data[CISD_DATA_FULL_COUNT_PER_DAY] = 1;
-			pcisd->data[CISD_DATA_BATT_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_CHG_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_WPC_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_USB_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_BATT_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_CHG_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_WPC_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_USB_TEMP_MIN_PER_DAY] = 1000;
+	        /* Clear Daily Data */
+	        for (j = CISD_DATA_FULL_COUNT_PER_DAY; j < CISD_DATA_MAX_PER_DAY; j++)
+	            pcisd->data[j] = 0;
 
-			pcisd->data[CISD_DATA_CHG_BATT_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_CHG_CHG_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_CHG_WPC_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_CHG_USB_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_CHG_BATT_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_CHG_CHG_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_CHG_WPC_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_CHG_USB_TEMP_MIN_PER_DAY] = 1000;
+	        pcisd->data[CISD_DATA_FULL_COUNT_PER_DAY] = 1;
+	        pcisd->data[CISD_DATA_BATT_TEMP_MAX_PER_DAY] = -300;
+	        pcisd->data[CISD_DATA_CHG_TEMP_MAX_PER_DAY] = -300;
+	        pcisd->data[CISD_DATA_WPC_TEMP_MAX_PER_DAY] = -300;
+	        pcisd->data[CISD_DATA_USB_TEMP_MAX_PER_DAY] = -300;
+	        pcisd->data[CISD_DATA_BATT_TEMP_MIN_PER_DAY] = 1000;
+	        pcisd->data[CISD_DATA_CHG_TEMP_MIN_PER_DAY] = 1000;
+	        pcisd->data[CISD_DATA_WPC_TEMP_MIN_PER_DAY] = 1000;
+	        pcisd->data[CISD_DATA_USB_TEMP_MIN_PER_DAY] = 1000;
 
-			pcisd->data[CISD_DATA_CAP_MIN_PER_DAY] = 0xFFFF;
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
-		}
-		break;
-	case CISD_WIRE_COUNT:
-		{
-			struct cisd *pcisd = &battery->cisd;
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
-				pcisd->data[CISD_DATA_WIRE_COUNT]);
-		}
-		break;
+	        pcisd->data[CISD_DATA_CHG_BATT_TEMP_MAX_PER_DAY] = -300;
+	        pcisd->data[CISD_DATA_CHG_CHG_TEMP_MAX_PER_DAY] = -300;
+	        pcisd->data[CISD_DATA_CHG_WPC_TEMP_MAX_PER_DAY] = -300;
+	        pcisd->data[CISD_DATA_CHG_USB_TEMP_MAX_PER_DAY] = -300;
+	        pcisd->data[CISD_DATA_CHG_BATT_TEMP_MIN_PER_DAY] = 1000;
+	        pcisd->data[CISD_DATA_CHG_CHG_TEMP_MIN_PER_DAY] = 1000;
+	        pcisd->data[CISD_DATA_CHG_WPC_TEMP_MIN_PER_DAY] = 1000;
+	        pcisd->data[CISD_DATA_CHG_USB_TEMP_MIN_PER_DAY] = 1000;
+
+	        pcisd->data[CISD_DATA_CAP_MIN_PER_DAY] = 0xFFFF;
+	        i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
+
+	        kfree(temp_buf);
+	    }
+	    break;
+
 	case CISD_WC_DATA:
-		{
-			struct cisd *pcisd = &battery->cisd;
-			struct pad_data *pad_data = pcisd->pad_array;
-			char temp_buf[1024] = {0,};
-			int j = 0;
+	    {
+	        struct cisd *pcisd = &battery->cisd;
+	        struct pad_data *pad_data = pcisd->pad_array;
+	        char *temp_buf = kmalloc(1024, GFP_KERNEL);
+	        int j = 0;
 
-			sprintf(temp_buf+strlen(temp_buf), "%d %d",
-				PAD_INDEX_VALUE, pcisd->pad_count);
-			while ((pad_data != NULL) && ((pad_data = pad_data->next) != NULL) &&
-					(pad_data->id < MAX_PAD_ID) && (j++ < pcisd->pad_count))
-				sprintf(temp_buf+strlen(temp_buf), " 0x%02x:%d", pad_data->id, pad_data->count);
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
-		}
-		break;
+	        if (!temp_buf) {
+	            pr_err("%s: Failed to allocate temp_buf for CISD_WC_DATA\n", __func__);
+	            i = -ENOMEM;
+	            break;
+	        }
+
+	        sprintf(temp_buf, "%d %d",
+	            PAD_INDEX_VALUE, pcisd->pad_count);
+	        while ((pad_data != NULL) && ((pad_data = pad_data->next) != NULL) &&
+	                (pad_data->id < MAX_PAD_ID) && (j++ < pcisd->pad_count))
+	            sprintf(temp_buf + strlen(temp_buf), " 0x%02x:%d", pad_data->id, pad_data->count);
+	        i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
+
+	        kfree(temp_buf);
+	    }
+	    break;
+
 	case CISD_WC_DATA_JSON:
-		{
-			struct cisd *pcisd = &battery->cisd;
-			struct pad_data *pad_data = pcisd->pad_array;
-			char temp_buf[1024] = {0,};
-			int j = 0;
+	    {
+	        struct cisd *pcisd = &battery->cisd;
+	        struct pad_data *pad_data = pcisd->pad_array;
+	        char *temp_buf = kmalloc(1024, GFP_KERNEL);
+	        int j = 0;
 
-			sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
-					PAD_INDEX_STRING, PAD_INDEX_VALUE);
-			while ((pad_data != NULL) && ((pad_data = pad_data->next) != NULL) &&
-					(pad_data->id < MAX_PAD_ID) && (j++ < pcisd->pad_count))
-				sprintf(temp_buf+strlen(temp_buf), ",\"%s%02x\":\"%d\"",
-					PAD_JSON_STRING, pad_data->id, pad_data->count);
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
-		}
-		break;
+	        if (!temp_buf) {
+	            pr_err("%s: Failed to allocate temp_buf for CISD_WC_DATA_JSON\n", __func__);
+	            i = -ENOMEM;
+	            break;
+	        }
+
+	        sprintf(temp_buf, "\"%s\":\"%d\"",
+	                PAD_INDEX_STRING, PAD_INDEX_VALUE);
+	        while ((pad_data != NULL) && ((pad_data = pad_data->next) != NULL) &&
+	                (pad_data->id < MAX_PAD_ID) && (j++ < pcisd->pad_count))
+	            sprintf(temp_buf + strlen(temp_buf), ",\"%s%02x\":\"%d\"",
+	                PAD_JSON_STRING, pad_data->id, pad_data->count);
+	        i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
+
+	        kfree(temp_buf);
+	    }
+	    break;
 	case PREV_BATTERY_DATA:
 		{
 			if (battery->enable_update_data)
