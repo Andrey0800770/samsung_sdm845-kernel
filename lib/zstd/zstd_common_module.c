@@ -10,15 +10,15 @@
  */
 
 #include <linux/module.h>
-
 #include "common/huf.h"
 #include "common/fse.h"
 #include "common/zstd_internal.h"
 
-// Export symbols shared by compress and decompress into a common module
-
+// Export symbols shared by compress and decompress
 #undef ZSTD_isError   /* defined within zstd_internal.h */
+
 EXPORT_SYMBOL_GPL(FSE_readNCount);
+EXPORT_SYMBOL_GPL(FSE_readNCount_bmi2);
 EXPORT_SYMBOL_GPL(HUF_readStats);
 EXPORT_SYMBOL_GPL(HUF_readStats_wksp);
 EXPORT_SYMBOL_GPL(ZSTD_isError);
