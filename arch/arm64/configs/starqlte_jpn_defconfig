@@ -6111,3 +6111,6 @@ CONFIG_SIMPLE_GPU_ALGORITHM=y
 
 # SBalance IRQ balancer
 CONFIG_IRQ_SBALANCE=y
+
+# Incremental Filesystem
+CONFIG_INCREMENTAL_FS=y
