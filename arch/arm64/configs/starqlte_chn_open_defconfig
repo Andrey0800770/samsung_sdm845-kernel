@@ -6211,3 +6211,6 @@ CONFIG_IRQ_SBALANCE=y
 
 # Incremental Filesystem
 CONFIG_INCREMENTAL_FS=y
+
+# Wireguard Module
+CONFIG_WIREGUARD=y
