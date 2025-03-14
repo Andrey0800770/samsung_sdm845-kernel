@@ -1,7 +1,7 @@
 VERSION = 1.0
 
 BINDIR=usr/bin
-WARNFLAGS=-Wall -Wshadow -W -Wformat -Wimplicit-function-declaration -Wimplicit-int
+WARNFLAGS=-Wall -Wshadow -W -Wformat
 CFLAGS+= -O1 ${WARNFLAGS} -fstack-protector
 CC=$(CROSS_COMPILE)gcc
 
