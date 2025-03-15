@@ -19,7 +19,9 @@
 #include <linux/notifier.h>
 #include <linux/spinlock.h>
 #include <linux/list_sort.h>
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 #include "sec_debug_internal.h"
 #include "sec_key_notifier.h"

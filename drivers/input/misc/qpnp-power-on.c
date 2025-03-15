@@ -35,7 +35,9 @@
 #include <linux/qpnp/qpnp-misc.h>
 #include <linux/power_supply.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 #ifdef CONFIG_SEC_PM
 extern int poff_status;

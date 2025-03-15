@@ -25,7 +25,9 @@
 #define INPUT_LOG_BUF_SIZE	512
 
 #ifdef CONFIG_SEC_DEBUG_TSP_LOG
+#ifdef CONFIG_SEC_DEBUG
 //#include <linux/sec_debug.h>		/* exynos */
+#endif
 #include <linux/input/sec_tsp_log.h>	/* qualcomm */
 
 #define input_dbg(mode, dev, fmt, ...)						\

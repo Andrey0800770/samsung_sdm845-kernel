@@ -37,7 +37,9 @@
 #include <soc/qcom/sysmon.h>
 #include <trace/events/trace_msm_pil_event.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 #include <asm/current.h>
 #include <linux/timer.h>
 

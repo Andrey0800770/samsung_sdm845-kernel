@@ -30,8 +30,12 @@
 #include <asm/timex.h>
 #include <soc/qcom/minidump.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_summary.h>
+#endif
 
 #define SENTINEL_BYTE_1 0xFF
 #define SENTINEL_BYTE_2 0xAA

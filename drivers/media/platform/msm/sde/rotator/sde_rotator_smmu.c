@@ -36,7 +36,9 @@
 #if defined(CONFIG_DISPLAY_SAMSUNG)
 #include <linux/delay.h>
 #include "../../../../../gpu/drm/msm/samsung/ss_dsi_panel_debug.h"
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 #endif
 
 #define SMMU_SDE_ROT_SEC	"qcom,smmu_sde_rot_sec"

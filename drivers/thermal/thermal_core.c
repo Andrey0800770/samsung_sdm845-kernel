@@ -46,7 +46,9 @@
 #include "thermal_hwmon.h"
 
 #include <linux/kernel.h>
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 #ifdef CONFIG_SEC_PM
 void *thermal_ipc_log;

@@ -62,8 +62,12 @@
 #endif
 
 #ifdef CONFIG_SEC_DEBUG_SUMMARY
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_summary.h>
+#endif
 #endif
 
 #ifdef CONFIG_SEC_PM

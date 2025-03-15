@@ -32,9 +32,15 @@
 #include <asm/memory.h>
 
 #include <linux/sec_bsp.h>
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_user_reset.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_summary.h>
+#endif
 
 #include "sec_debug_internal.h"
 

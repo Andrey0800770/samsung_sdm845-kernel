@@ -34,8 +34,12 @@
 #include <linux/dma-mapping.h>
 
 #include <linux/sec_bsp.h>
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_summary.h>
+#endif
 
 #define MODULE_NAME "msm_watchdog"
 #define WDT0_ACCSCSSNBARK_INT 0

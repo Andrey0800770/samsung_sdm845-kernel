@@ -19,7 +19,9 @@
 
 #include "internals.h"
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 /*
  * lockdep: we want to handle all irq_desc locks as a single lock-class:

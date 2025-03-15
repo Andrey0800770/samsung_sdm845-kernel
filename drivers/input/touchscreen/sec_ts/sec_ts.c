@@ -634,7 +634,9 @@ static int sec_ts_read_from_sponge(struct sec_ts_data *ts, u8 *data, int len)
 }
 
 #if defined(CONFIG_TOUCHSCREEN_DUMP_MODE)
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 extern struct tsp_dump_callbacks dump_callbacks;
 static struct delayed_work *p_ghost_check;
 

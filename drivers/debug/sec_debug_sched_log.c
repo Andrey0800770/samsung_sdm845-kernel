@@ -20,7 +20,9 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 #include "sec_debug_internal.h"
 

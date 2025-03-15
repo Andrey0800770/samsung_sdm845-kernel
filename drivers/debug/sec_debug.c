@@ -48,9 +48,15 @@
 #include <asm/stacktrace.h>
 #include <asm/system_misc.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_summary.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_user_reset.h>
+#endif
 #include <linux/sec_param.h>
 
 // [ SEC_SELINUX_PORTING_QUALCOMM

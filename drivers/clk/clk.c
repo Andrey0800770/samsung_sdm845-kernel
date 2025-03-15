@@ -31,7 +31,9 @@
 #include <linux/regulator/consumer.h>
 #include <trace/events/power.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 #include "clk.h"
 

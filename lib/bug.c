@@ -46,8 +46,12 @@
 #include <linux/bug.h>
 #include <linux/sched.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_user_reset.h>
+#endif
 
 extern const struct bug_entry __start___bug_table[], __stop___bug_table[];
 

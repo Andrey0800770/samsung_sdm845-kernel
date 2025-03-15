@@ -63,7 +63,9 @@
 
 #include "io-pgtable.h"
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_user_reset.h>
+#endif
 
 /* Maximum number of context banks per SMMU */
 #define ARM_SMMU_MAX_CBS		128

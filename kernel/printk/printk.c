@@ -53,8 +53,12 @@
 #include <linux/proc_fs.h>
 
 #include <linux/sec_bsp.h>
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_summary.h>
+#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/printk.h>

@@ -22,7 +22,9 @@
 #endif
 
 #if defined(CONFIG_SEC_DEBUG)
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 #endif
 
 static char *scsi_log_reserve_buffer(size_t *len)

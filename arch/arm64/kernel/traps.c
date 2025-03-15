@@ -46,9 +46,21 @@
 #include <asm/sysreg.h>
 #include <trace/events/exception.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#endif
+#ifdef CONFIG_SEC_DEBUG
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_summary.h>
+#endif
+#endif
+#ifdef CONFIG_SEC_DEBUG
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_user_reset.h>
+#endif
+#endif
 
 static const char *handler[]= {
 	"Synchronous Abort",

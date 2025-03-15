@@ -78,7 +78,9 @@ Copyright (C) 2012, Samsung Electronics. All rights reserved.
 #include "ss_flash_table_data_common.h"
 
 #if defined(CONFIG_SEC_DEBUG)
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 #endif
 
 extern bool enable_pr_debug;

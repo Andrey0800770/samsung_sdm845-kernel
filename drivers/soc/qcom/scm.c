@@ -23,7 +23,9 @@
 #include <asm/compiler.h>
 
 #include <soc/qcom/scm.h>
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/scm.h>

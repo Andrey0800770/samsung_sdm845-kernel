@@ -25,7 +25,9 @@
 #include <linux/notifier.h>
 #include <linux/slab.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 #include "sec_key_notifier.h"
 

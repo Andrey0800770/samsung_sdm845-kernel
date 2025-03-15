@@ -30,9 +30,15 @@
 #include <trace/events/exception.h>
 #include <soc/qcom/minidump.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_summary.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_user_reset.h>
+#endif
 #include <asm/memory.h>
 
 #define PANIC_TIMER_STEP 100

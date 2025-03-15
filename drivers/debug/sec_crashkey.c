@@ -24,7 +24,9 @@
 #include <linux/delay.h>
 #include <linux/of.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 #include <linux/sec_crashkey.h>
 
 #include "sec_debug_internal.h"

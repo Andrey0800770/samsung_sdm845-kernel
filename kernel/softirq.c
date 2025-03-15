@@ -30,7 +30,9 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/irq.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 /*
    - No shared variables, all the data are CPU local.
@@ -289,15 +291,15 @@ restart:
 		prev_count = preempt_count();
 
 		kstat_incr_softirqs_this_cpu(vec_nr);
-
+#ifdef CONFIG_SEC_DEBUG
 		trace_softirq_entry(vec_nr);
-
 		sec_debug_irq_sched_log(vec_nr, h->action,
 					"softirq", SOFTIRQ_ENTRY);
 		h->action(h);
 		sec_debug_irq_sched_log(vec_nr, h->action,
 					"softirq", SOFTIRQ_EXIT);
 		trace_softirq_exit(vec_nr);
+#endif
 		if (unlikely(prev_count != preempt_count())) {
 			pr_err("huh, entered softirq %u %s %p with preempt_count %08x, exited with %08x?\n",
 			       vec_nr, softirq_to_name[vec_nr], h->action,
@@ -370,7 +372,9 @@ void irq_enter(void)
 static inline void invoke_softirq(void)
 {
 	if (!force_irqthreads) {
+#ifdef CONFIG_SEC_DEBUG
 #ifdef CONFIG_HAVE_IRQ_EXIT_ON_IRQ_STACK
+#endif
 		/*
 		 * We can safely execute softirq on the current stack if
 		 * it is the irq stack, because it should be near empty
@@ -408,7 +412,9 @@ static inline void tick_irq_exit(void)
  */
 void irq_exit(void)
 {
+#ifdef CONFIG_SEC_DEBUG
 #ifndef __ARCH_IRQ_EXIT_IRQS_DISABLED
+#endif
 	local_irq_disable();
 #else
 	WARN_ON_ONCE(!irqs_disabled());
@@ -532,14 +538,23 @@ static __latent_entropy void tasklet_action(struct softirq_action *a)
 				if (!test_and_clear_bit(TASKLET_STATE_SCHED,
 							&t->state))
 					BUG();
+#ifdef CONFIG_SEC_DEBUG
 				sec_debug_irq_sched_log(-1, t->func,
 							"tasket_action",
+#ifdef CONFIG_SEC_DEBUG
+#ifdef CONFIG_SEC_DEBUG
 							SOFTIRQ_ENTRY);
+#endif
+#endif
 				t->func(t->data);
 				sec_debug_irq_sched_log(-1, t->func,
 							"tasket_action",
+#ifdef CONFIG_SEC_DEBUG
+#ifdef CONFIG_SEC_DEBUG
 							SOFTIRQ_EXIT);
-
+#endif
+#endif
+#endif
 				tasklet_unlock(t);
 				continue;
 			}

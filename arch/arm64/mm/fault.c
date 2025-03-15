@@ -44,7 +44,11 @@
 #include <soc/qcom/scm.h>
 #include <trace/events/exception.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_user_reset.h>
+#endif
+#endif
 struct fault_info {
 	int	(*fn)(unsigned long addr, unsigned int esr,
 		      struct pt_regs *regs);

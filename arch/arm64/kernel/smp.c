@@ -59,7 +59,11 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/ipi.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#endif
 
 DEFINE_PER_CPU_READ_MOSTLY(int, cpu_number);
 EXPORT_PER_CPU_SYMBOL(cpu_number);

@@ -37,7 +37,9 @@
 
 #include <linux/notifier.h>
 #include <linux/ftrace.h>
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 #if defined(CONFIG_SEC_ABC)
 #include <linux/sti/abc_common.h>

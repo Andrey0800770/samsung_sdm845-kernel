@@ -32,8 +32,12 @@
 
 #include <linux/sec_smem.h>
 #include <linux/sec_class.h>
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_user_reset.h>
+#endif
 #include <linux/sec_debug_partition.h>
 #include <linux/sec_hw_param.h>
 

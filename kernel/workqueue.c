@@ -55,7 +55,9 @@
 
 #include "workqueue_internal.h"
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 enum {
 	/*

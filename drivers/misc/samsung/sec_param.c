@@ -30,7 +30,9 @@
 #include <linux/file.h>
 #include <linux/syscalls.h>
 #include <linux/delay.h>
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 #ifdef CONFIG_SEC_NAD
 #include <linux/sec_nad.h>
 #endif

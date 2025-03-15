@@ -52,7 +52,9 @@
 
 #include "tick-internal.h"
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/timer.h>

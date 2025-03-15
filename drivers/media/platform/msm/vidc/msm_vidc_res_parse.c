@@ -22,7 +22,9 @@
 #include "venus_boot.h"
 #include "soc/qcom/secure_buffer.h"
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_user_reset.h>
+#endif
 
 enum clock_properties {
 	CLOCK_PROP_HAS_SCALING = 1 << 0,

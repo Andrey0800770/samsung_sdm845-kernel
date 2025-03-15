@@ -30,7 +30,9 @@
 #include <linux/of_address.h>
 #include <linux/io.h>
 #include <asm/cacheflush.h>
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 #include <soc/qcom/subsystem_restart.h>
 #include <linux/vmalloc.h>
 #include <linux/slab.h>

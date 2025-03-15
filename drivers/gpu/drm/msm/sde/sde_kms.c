@@ -53,7 +53,9 @@
 #include "sde_trace.h"
 
 #if defined(CONFIG_DISPLAY_SAMSUNG)
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 #include "ss_dsi_panel_common.h"
 #endif
 

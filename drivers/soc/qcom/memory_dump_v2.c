@@ -25,8 +25,12 @@
 #include <linux/module.h>
 
 #ifdef CONFIG_SEC_DEBUG_SUMMARY
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_summary.h>
+#endif
 #endif
 
 #define MSM_DUMP_TABLE_VERSION		MSM_DUMP_MAKE_VERSION(2, 0)

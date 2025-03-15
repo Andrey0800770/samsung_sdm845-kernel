@@ -41,7 +41,9 @@
 
 #include "../battery_v2/include/sec_charging_common.h"
 
+#ifdef CONFIG_SEC_DEBUG
 //#include <linux/sec_debug.h> > no need
+#endif
 //#include <linux/sec_ext.h> > what is the set_param?
 
 extern unsigned int lpcharge;

@@ -34,8 +34,12 @@
 
 #include <soc/qcom/scm.h>
 
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug_user_reset.h>
+#endif
 
 /* timeout for dog bark/bite */
 #define DELAY_TIME 20000

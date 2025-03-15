@@ -2625,7 +2625,9 @@ static int fts_parse_dt(struct i2c_client *client)
 #endif
 
 #if defined(CONFIG_TOUCHSCREEN_DUMP_MODE)
+#ifdef CONFIG_SEC_DEBUG
 #include <linux/sec_debug.h>
+#endif
 extern struct tsp_dump_callbacks dump_callbacks;
 void tsp_dump(void);
 #endif
