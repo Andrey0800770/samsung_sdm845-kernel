@@ -188,7 +188,6 @@ obj-$(CONFIG_SENSORS_HRMSENSOR)	+= optics/
 obj-$(CONFIG_SENSORS_MAX86915)	+= optics/
 obj-$(CONFIG_SENSORS_TCS3407)	+= optics/
 obj-$(CONFIG_TEE)		+= tee/
-<<<<<<< HEAD
 obj-$(CONFIG_ADSP_FACTORY)      += adsp_factory/
 
 ifeq ($(CONFIG_BATTERY_SAMSUNG_V2), y)
