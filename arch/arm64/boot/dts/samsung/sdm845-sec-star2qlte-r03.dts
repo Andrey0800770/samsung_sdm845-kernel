@@ -22987,10 +22987,10 @@
 
 				qcom,gpu-pwrlevel@7 {
 					reg = <0x7>;
-					qcom,gpu-freq = <0x0>;
-					qcom,bus-freq = <0x0>;
-					qcom,bus-min = <0x0>;
-					qcom,bus-max = <0x0>;
+                                        qcom,gpu-freq = <0xaba9500>;
+                                        qcom,bus-freq = <0x3>;
+                                        qcom,bus-min = <0x2>;
+                                        qcom,bus-max = <0x4>;
 				};
 			};
 		};
