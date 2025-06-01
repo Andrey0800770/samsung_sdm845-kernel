@@ -22764,7 +22764,7 @@
 			interrupt-names = "kgsl_3d0_irq";
 			qcom,id = <0x0>;
 			qcom,chipid = <0x6030001>;
-			qcom,initial-pwrlevel = <0x7>;
+			qcom,initial-pwrlevel = <0x6>;
 			qcom,gpu-quirk-hfi-use-reg;
 			qcom,gpu-quirk-secvid-set-once;
 			qcom,idle-timeout = <0x50>;
@@ -22946,10 +22946,10 @@
 
 				qcom,gpu-pwrlevel@7 {
 					reg = <0x7>;
-                                        qcom,gpu-freq = <0xaba9500>;
-                                        qcom,bus-freq = <0x3>;
-                                        qcom,bus-min = <0x2>;
-                                        qcom,bus-max = <0x4>;
+					qcom,gpu-freq = <0x0>;
+					qcom,bus-freq = <0x0>;
+					qcom,bus-min = <0x0>;
+					qcom,bus-max = <0x0>;
 				};
 			};
 		};
