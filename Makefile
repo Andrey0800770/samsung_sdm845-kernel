@@ -24,6 +24,8 @@ export LC_COLLATE LC_NUMERIC
 # Avoid interference with shell env settings
 unexport GREP_OPTIONS
 
+# Set Platform Version for BCMHD driver
+export PLATFORM_VERSION=10
 # We are using a recursive build, so we need to do a little thinking
 # to get the ordering right.
 #
