@@ -29,49 +29,53 @@ unsigned int aa_hash_size(void)
 	return apparmor_hash_size;
 }
 
-int aa_calc_profile_hash(struct aa_profile *profile, u32 version, void *start,
-			 size_t len)
+int aa_calc_profile_hash(struct aa_profile *profile, u32 version, void *start, size_t len)
 {
-	struct {
-		struct shash_desc shash;
-		char ctx[crypto_shash_descsize(apparmor_tfm)];
-	} desc;
-	int error = -ENOMEM;
-	u32 le32_version = cpu_to_le32(version);
+    struct shash_desc *desc;
+    size_t desc_size;
+    int error = -ENOMEM;
+    u32 le32_version = cpu_to_le32(version);
 
-	if (!aa_g_hash_policy)
-		return 0;
+    if (!aa_g_hash_policy)
+        return 0;
 
-	if (!apparmor_tfm)
-		return 0;
+    if (!apparmor_tfm)
+        return 0;
 
-	profile->hash = kzalloc(apparmor_hash_size, GFP_KERNEL);
-	if (!profile->hash)
-		goto fail;
+    profile->hash = kzalloc(apparmor_hash_size, GFP_KERNEL);
+    if (!profile->hash)
+        goto fail;
 
-	desc.shash.tfm = apparmor_tfm;
-	desc.shash.flags = 0;
+    desc_size = sizeof(struct shash_desc) + crypto_shash_descsize(apparmor_tfm);
+    desc = kmalloc(desc_size, GFP_KERNEL);
+    if (!desc)
+        goto fail;
 
-	error = crypto_shash_init(&desc.shash);
-	if (error)
-		goto fail;
-	error = crypto_shash_update(&desc.shash, (u8 *) &le32_version, 4);
-	if (error)
-		goto fail;
-	error = crypto_shash_update(&desc.shash, (u8 *) start, len);
-	if (error)
-		goto fail;
-	error = crypto_shash_final(&desc.shash, profile->hash);
-	if (error)
-		goto fail;
+    desc->tfm = apparmor_tfm;
+    desc->flags = 0;
 
-	return 0;
+    error = crypto_shash_init(desc);
+    if (error)
+        goto fail_free_desc;
+    error = crypto_shash_update(desc, (u8 *) &le32_version, 4);
+    if (error)
+        goto fail_free_desc;
+    error = crypto_shash_update(desc, (u8 *) start, len);
+    if (error)
+        goto fail_free_desc;
+    error = crypto_shash_final(desc, profile->hash);
+    if (error)
+        goto fail_free_desc;
 
+    kfree(desc);
+    return 0;
+
+fail_free_desc:
+    kfree(desc);
 fail:
-	kfree(profile->hash);
-	profile->hash = NULL;
-
-	return error;
+    kfree(profile->hash);
+    profile->hash = NULL;
+    return error;
 }
 
 static int __init init_profile_hash(void)
