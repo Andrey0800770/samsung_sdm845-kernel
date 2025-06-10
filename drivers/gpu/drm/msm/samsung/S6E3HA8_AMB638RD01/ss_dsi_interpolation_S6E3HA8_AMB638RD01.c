@@ -398,40 +398,26 @@ int flash_gamma_support_S6E3HA8_AMB638RD01(struct samsung_display_driver_data *v
 
 int table_parsing_data_S6E3HA8_AMB638RD01(struct samsung_display_driver_data *vdd)
 {
-	struct hbm_table_format {
-		unsigned char aor[vdd->dtsi_data.aor_size];
-		unsigned char vint[vdd->dtsi_data.vint_size];
-		unsigned char elvss[vdd->dtsi_data.elvss_size];
-		unsigned char irc[vdd->dtsi_data.irc_size];
-	}__packed;
-
-	struct normal_table_format {
-		unsigned char gamma[vdd->dtsi_data.gamma_size];
-		unsigned char aor[vdd->dtsi_data.aor_size];
-		unsigned char vint[vdd->dtsi_data.vint_size];
-		unsigned char elvss[vdd->dtsi_data.elvss_size];
-		unsigned char irc[vdd->dtsi_data.irc_size];
-	}__packed;
-
-	struct hmd_table_format {
-		unsigned char gamma[vdd->dtsi_data.gamma_size];
-		unsigned char aor[vdd->dtsi_data.aor_size];
-	}__packed;
-
 	int gamma_size = vdd->dtsi_data.gamma_size;
 	int aor_size = vdd->dtsi_data.aor_size;
 	int vint_size = vdd->dtsi_data.vint_size;
 	int elvss_size = vdd->dtsi_data.elvss_size;
 	int irc_size = vdd->dtsi_data.irc_size;
 
-	struct hbm_table_format *hbm_table = (struct hbm_table_format *)table_hbm_br_info;
-	int hbm_step = sizeof(table_hbm_br_info) / sizeof(struct hbm_table_format);
+	/* Calculate structure sizes dynamically */
+	int hbm_struct_size = aor_size + vint_size + elvss_size + irc_size;
+	int normal_struct_size = gamma_size + aor_size + vint_size + elvss_size + irc_size;
+	int hmd_struct_size = gamma_size + aor_size;
 
-	struct normal_table_format *normal_table = (struct normal_table_format *)table_normal_br_info;
-	int normal_step = sizeof(table_normal_br_info) / sizeof(struct normal_table_format);
+	/* Direct pointer access to table data */
+	unsigned char *hbm_table = (unsigned char *)table_hbm_br_info;
+	int hbm_step = sizeof(table_hbm_br_info) / hbm_struct_size;
 
-	struct hmd_table_format *hmd_table = (struct hmd_table_format *)table_hmd_br_info;
-	int hmd_step = sizeof(table_hmd_br_info) / sizeof(struct hmd_table_format);
+	unsigned char *normal_table = (unsigned char *)table_normal_br_info;
+	int normal_step = sizeof(table_normal_br_info) / normal_struct_size;
+
+	unsigned char *hmd_table = (unsigned char *)table_hmd_br_info;
+	int hmd_step = sizeof(table_hmd_br_info) / hmd_struct_size;
 
 	int input_table_size = sizeof(table_hbm_br_info) + sizeof(table_normal_br_info) + sizeof(table_hmd_br_info);
 	unsigned char *dst = vdd->panel_br_info.br_data_raw;
@@ -451,27 +437,50 @@ int table_parsing_data_S6E3HA8_AMB638RD01(struct samsung_display_driver_data *vd
 
 	LCD_INFO("hbm_step : %d normal_step : %d hmd_step : %d", hbm_step, normal_step, hmd_step);
 
-	/* hbm data update */
+	/* HBM data update - access data directly from byte array */
 	for (loop = 0; loop < hbm_step; loop++) {
-		memcpy(dst + vdd->dtsi_data.flash_table_hbm_aor_offset + (aor_size * loop), hbm_table[loop].aor, aor_size);
-		memcpy(dst + vdd->dtsi_data.flash_table_hbm_vint_offset + (vint_size * loop), hbm_table[loop].vint, vint_size);
-		memcpy(dst + vdd->dtsi_data.flash_table_hbm_elvss_offset + (elvss_size * loop), hbm_table[loop].elvss, elvss_size);
-		memcpy(dst + vdd->dtsi_data.flash_table_hbm_irc_offset + (irc_size * loop), hbm_table[loop].irc, irc_size);
+		unsigned char *current_hbm = hbm_table + (loop * hbm_struct_size);
+
+		/* Extract data from packed structure layout */
+		unsigned char *aor_data = current_hbm;
+		unsigned char *vint_data = current_hbm + aor_size;
+		unsigned char *elvss_data = current_hbm + aor_size + vint_size;
+		unsigned char *irc_data = current_hbm + aor_size + vint_size + elvss_size;
+
+		memcpy(dst + vdd->dtsi_data.flash_table_hbm_aor_offset + (aor_size * loop), aor_data, aor_size);
+		memcpy(dst + vdd->dtsi_data.flash_table_hbm_vint_offset + (vint_size * loop), vint_data, vint_size);
+		memcpy(dst + vdd->dtsi_data.flash_table_hbm_elvss_offset + (elvss_size * loop), elvss_data, elvss_size);
+		memcpy(dst + vdd->dtsi_data.flash_table_hbm_irc_offset + (irc_size * loop), irc_data, irc_size);
 	}
 
-	/* normal data update */
+	/* Normal data update - access data directly from byte array */
 	for (loop = 0; loop < normal_step; loop++) {
-		memcpy(dst + vdd->dtsi_data.flash_table_normal_gamma_offset + (gamma_size * loop), normal_table[loop].gamma, gamma_size);
-		memcpy(dst + vdd->dtsi_data.flash_table_normal_aor_offset + (aor_size * loop), normal_table[loop].aor, aor_size);
-		memcpy(dst + vdd->dtsi_data.flash_table_normal_vint_offset + (vint_size * loop), normal_table[loop].vint, vint_size);
-		memcpy(dst + vdd->dtsi_data.flash_table_normal_elvss_offset + (elvss_size * loop), normal_table[loop].elvss, elvss_size);
-		memcpy(dst + vdd->dtsi_data.flash_table_normal_irc_offset + (irc_size * loop), normal_table[loop].irc, irc_size);
+		unsigned char *current_normal = normal_table + (loop * normal_struct_size);
+
+		/* Extract data from packed structure layout */
+		unsigned char *gamma_data = current_normal;
+		unsigned char *aor_data = current_normal + gamma_size;
+		unsigned char *vint_data = current_normal + gamma_size + aor_size;
+		unsigned char *elvss_data = current_normal + gamma_size + aor_size + vint_size;
+		unsigned char *irc_data = current_normal + gamma_size + aor_size + vint_size + elvss_size;
+
+		memcpy(dst + vdd->dtsi_data.flash_table_normal_gamma_offset + (gamma_size * loop), gamma_data, gamma_size);
+		memcpy(dst + vdd->dtsi_data.flash_table_normal_aor_offset + (aor_size * loop), aor_data, aor_size);
+		memcpy(dst + vdd->dtsi_data.flash_table_normal_vint_offset + (vint_size * loop), vint_data, vint_size);
+		memcpy(dst + vdd->dtsi_data.flash_table_normal_elvss_offset + (elvss_size * loop), elvss_data, elvss_size);
+		memcpy(dst + vdd->dtsi_data.flash_table_normal_irc_offset + (irc_size * loop), irc_data, irc_size);
 	}
 
-	/* hmd data update */
+	/* HMD data update - access data directly from byte array */
 	for (loop = 0; loop < hmd_step; loop++) {
-		memcpy(dst + vdd->dtsi_data.flash_table_hmd_gamma_offset + (gamma_size * loop), hmd_table[loop].gamma, gamma_size);
-		memcpy(dst + vdd->dtsi_data.flash_table_hmd_aor_offset + (aor_size * loop), hmd_table[loop].aor, aor_size);
+		unsigned char *current_hmd = hmd_table + (loop * hmd_struct_size);
+
+		/* Extract data from packed structure layout */
+		unsigned char *gamma_data = current_hmd;
+		unsigned char *aor_data = current_hmd + gamma_size;
+
+		memcpy(dst + vdd->dtsi_data.flash_table_hmd_gamma_offset + (gamma_size * loop), gamma_data, gamma_size);
+		memcpy(dst + vdd->dtsi_data.flash_table_hmd_aor_offset + (aor_size * loop), aor_data, aor_size);
 	}
 
 	return 0;
