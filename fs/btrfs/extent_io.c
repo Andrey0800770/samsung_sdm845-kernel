@@ -3874,10 +3874,6 @@ retry:
 			if (!ret) {
 				free_extent_buffer(eb);
 				continue;
-			} else if (ret < 0) {
-				done = 1;
-				free_extent_buffer(eb);
-				break;
 			}
 
 			ret = write_one_eb(eb, fs_info, wbc, &epd);
