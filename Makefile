@@ -392,7 +392,6 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security -Wno-enum-conversion \
 		   -Wno-declaration-after-statement \
-		   -Wno-default-const-init-field-unsafe \
 		   -std=gnu89
 KBUILD_CPPFLAGS := -D__KERNEL__
 KBUILD_AFLAGS_KERNEL :=
@@ -504,6 +503,12 @@ ifneq ($(filter install,$(MAKECMDGOALS)),)
         ifneq ($(filter modules_install,$(MAKECMDGOALS)),)
 	        mixed-targets := 1
         endif
+endif
+
+# fix warning spam on clang 21
+CLANG_VERSION := $(shell $(CC) --version 2>/dev/null | grep -i "ZyC clang version 21.0.0git")
+ifneq ($(CLANG_VERSION),)
+    KBUILD_CFLAGS += -Wno-default-const-init-field-unsafe
 endif
 
 ifeq ($(cc-name),clang)
