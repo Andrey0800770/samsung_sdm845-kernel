@@ -345,9 +345,9 @@ scripts/Kbuild.include: ;
 include scripts/Kbuild.include
 
 # Make variables (CC, etc...)
+LDGOLD		= $(CROSS_COMPILE)ld.gold
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
-LDGOLD          = ld.lld-20
 CC		= clang
 LD		= ld.lld-20
 AR		= llvm-ar-20
@@ -358,7 +358,6 @@ READELF	= llvm-readelf-20
 OBJSIZE	= llvm-size-20
 STRIP		= llvm-strip-20
 else
-LDGOLD          = $(CROSS_COMPILE)ld.gold
 AS		= $(CROSS_COMPILE)as
 LD		= $(CROSS_COMPILE)ld
 CC		= $(CROSS_COMPILE)gcc
