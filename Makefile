@@ -347,7 +347,7 @@ include scripts/Kbuild.include
 # Make variables (CC, etc...)
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
-LDGOLD          = ld.bfd-20
+LDGOLD          = ld.lld-20
 CC		= clang
 LD		= ld.lld-20
 AR		= llvm-ar-20
