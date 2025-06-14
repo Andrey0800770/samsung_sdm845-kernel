@@ -4,7 +4,7 @@
 
 # Each configuration option enables a list of files.
 
-CFLAGS += -fno-lto
+ccflags-y += -fno-lto
 
 wm97xx-ts-y := wm97xx-core.o
 
