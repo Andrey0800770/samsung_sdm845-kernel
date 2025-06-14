@@ -115,7 +115,6 @@ endif
 fw-shipped-$(CONFIG_TOUCHSCREEN_FTS) += tsp_stm/fts8cd56_dream2.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS) += tsp_sec/y761_star1.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS) += tsp_sec/y761_star2.fw
-fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS_Y771) += tsp_sec/y761_star2.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS_Y771) += tsp_sec/y771_crown.fw tsp_sec/y771_crown_v2.fw tsp_sec/y771_crown_v1.fw
 fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS_Y661_DUAL) += tsp_sec/y661_lykan.fw
 fw-shipped-$(CONFIG_KEYBOARD_ABOV_TOUCH_FOLDER) += abov/abov_tk_kelly.fw
