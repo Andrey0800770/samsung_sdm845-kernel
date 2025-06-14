@@ -40,7 +40,7 @@ installed-fw := $(addprefix $(INSTALL_FW_PATH)/,$(fw-shipped-all))
 quiet_cmd_install = INSTALL $(subst $(srctree)/,,$@)
       cmd_install = mkdir -p $(@D); $(INSTALL) -m0644 $< $@
 
-installed-fw := $(addprefix $(INSTALL_FW_PATH)/,$(sort $(fw-shipped-all)))
+$(installed-fw): $(INSTALL_FW_PATH)/%: $(obj)/%
 	$(call cmd,install)
 
 PHONY +=  __fw_install __fw_modinst FORCE
