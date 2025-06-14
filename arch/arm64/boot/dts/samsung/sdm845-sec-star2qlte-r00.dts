@@ -4194,7 +4194,7 @@
 				sec,tclm_level = <0x2>;
 				sec,afe_base = <0x9>;
 				sec,project_name = "Star2", "G965";
-				sec,firmware_name = "tsp_sec/y761_star2.fw", "tsp_sec/y761_star2.fw";
+				sec,firmware_name = "tsp_sec/y761_star2.fw";
 				support_dex_mode;
 				sec,i2c-burstmax = <0x40>;
 			};
