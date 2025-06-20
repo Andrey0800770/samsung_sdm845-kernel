@@ -408,9 +408,6 @@ LINUXINCLUDE    := \
 		$(if $(KBUILD_SRC), -I$(srctree)/include) \
 		-I$(objtree)/include
 
-# KSU
-LINUXINCLUDE	+= -I$(srctree)/drivers/kernelsu/include
-
 LINUXINCLUDE	+= $(filter-out $(LINUXINCLUDE),$(USERINCLUDE))
 
 KBUILD_AFLAGS   := -D__ASSEMBLY__
@@ -547,6 +544,12 @@ ifneq ($(filter install,$(MAKECMDGOALS)),)
         endif
 endif
 
+# Fix warning spam on clang 21Add commentMore actions
+CLANG_VERSION := $(shell $(CC) --version 2>/dev/null | grep -i "ZyC clang version 21.0.0git")
+ifneq ($(CLANG_VERSION),)
+    KBUILD_CFLAGS += -Wno-default-const-init-field-unsafe
+endif
+
 ifeq ($(cc-name),clang)
 include scripts/Makefile.clang
 CLANG_FLAGS	+= -Werror=unknown-warning-option
@@ -609,7 +612,7 @@ scripts: scripts_basic include/config/auto.conf include/config/tristate.conf \
 
 # Objects we will link into vmlinux / subdirs we need to visit
 init-y		:= init/
-drivers-y	:= drivers/ sound/ firmware/
+drivers-y	:= drivers/ sound/ firmware/ techpack/
 net-y		:= net/
 libs-y		:= lib/
 core-y		:= usr/
@@ -1391,6 +1394,7 @@ headers_install: __headers
 	  $(error Headers not exportable for the $(SRCARCH) architecture))
 	$(Q)$(MAKE) $(hdr-inst)=include/uapi
 	$(Q)$(MAKE) $(hdr-inst)=arch/$(hdr-arch)/include/uapi/asm $(hdr-dst)
+	$(Q)$(MAKE) $(hdr-inst)=techpack
 
 PHONY += headers_check_all
 headers_check_all: headers_install_all
@@ -1400,6 +1404,7 @@ PHONY += headers_check
 headers_check: headers_install
 	$(Q)$(MAKE) $(hdr-inst)=include/uapi HDRCHECK=1
 	$(Q)$(MAKE) $(hdr-inst)=arch/$(hdr-arch)/include/uapi/asm $(hdr-dst) HDRCHECK=1
+	$(Q)$(MAKE) $(hdr-inst)=techpack HDRCHECK=1
 
 # ---------------------------------------------------------------------------
 # Kernel selftest
