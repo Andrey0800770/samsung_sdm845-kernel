@@ -824,7 +824,6 @@ KBUILD_CFLAGS	+= -mllvm -regalloc-enable-advisor=release \
 KBUILD_LDFLAGS	+= -mllvm -regalloc-enable-advisor=release \
 		   -mllvm -enable-local-reassign
 endif
-endif
 
 ifdef CONFIG_LLVM_MLGO_REGISTER
 # Enable MLGO for register allocation. default, release, development
