@@ -811,25 +811,7 @@ KBUILD_AFLAGS += -march=armv8-a+crc+crypto -mcpu=cortex-a75 -mtune=cortex-a55
 # renamed or dropped.
 KBUILD_CFLAGS  += -ftrivial-auto-var-init=zero
 KBUILD_CFLAGS  += $(call cc-option, -enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang)
-
-ifdef CONFIG_LLVM_MLGO_REGISTER
-# Enable MLGO for register allocation. default, release, development
-KBUILD_CFLAGS	+= -mllvm -regalloc-enable-advisor=release \
-		   -mllvm -enable-local-reassign
-KBUILD_LDFLAGS	+= -mllvm -regalloc-enable-advisor=release \
-		   -mllvm -enable-local-reassign
 endif
-
-ifdef CONFIG_LLVM_MLGO_REGISTER
-# Enable MLGO for register allocation. default, release, development
-KBUILD_CFLAGS	+= -mllvm -regalloc-enable-advisor=release \
-		   -mllvm -enable-local-reassign
-endif
-
-KBUILD_CFLAGS	+= -O2 $(call cc-disable-warning,maybe-uninitialized,)
-
-KBUILD_CFLAGS += $(call cc-ifversion, -lt, 0409, \
-			$(call cc-disable-warning,maybe-uninitialized,))
 
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
