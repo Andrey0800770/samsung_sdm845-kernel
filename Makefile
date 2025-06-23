@@ -349,14 +349,14 @@ LDGOLD		= $(CROSS_COMPILE)ld.gold
 CPP		= $(CC) -E
 ifneq ($(LLVM),)
 CC		= clang
-LD		= ld.lld-20
-AR		= llvm-ar-20
-NM		= llvm-nm-20
-OBJCOPY	= llvm-objcopy-20
-OBJDUMP	= llvm-objdump-20
-READELF	= llvm-readelf-20
-OBJSIZE	= llvm-size-20
-STRIP		= llvm-strip-20
+LD		= ld.lld
+AR		= llvm-ar
+NM		= llvm-nm
+OBJCOPY	= llvm-objcopy
+OBJDUMP	= llvm-objdump
+READELF	= llvm-readelf
+OBJSIZE	= llvm-size
+STRIP		= llvm-strip
 else
 AS		= $(CROSS_COMPILE)as
 LD		= $(CROSS_COMPILE)ld
@@ -566,8 +566,6 @@ KBUILD_CFLAGS += $(call cc-option, -fcatch-undefined-behavior)
 
 ifneq ($(LLVM_IAS),1)
 CLANG_FLAGS	+= -no-integrated-as
-else
-AS              = $(CROSS_COMPILE)as
 endif
 CLANG_FLAGS	+= -Werror=unknown-warning-option
 KBUILD_CFLAGS	+= $(CLANG_FLAGS)
@@ -710,8 +708,8 @@ LD		:= $(LDGOLD)
 LDFLAGS		+= -plugin LLVMgold.so
 # use llvm-ar for building symbol tables from IR files, and llvm-dis instead
 # of objdump for processing symbol versions and exports
-LLVM_AR		:= llvm-ar-20
-LLVM_DIS	:= llvm-dis-20
+LLVM_AR		:= llvm-ar
+LLVM_DIS	:= llvm-dis
 export LLVM_AR LLVM_DIS
 endif
 
