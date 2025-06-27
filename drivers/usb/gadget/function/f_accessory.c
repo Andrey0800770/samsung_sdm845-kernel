@@ -317,7 +317,7 @@ static struct usb_request *req_get(struct acc_dev *dev, struct list_head *head)
 
 static void acc_set_disconnected(struct acc_dev *dev)
 {
-	dev->disconnected = 1;
+	dev->disconnected = true;
 }
 
 static void acc_complete_in(struct usb_ep *ep, struct usb_request *req)
@@ -813,7 +813,7 @@ static int acc_open(struct inode *ip, struct file *fp)
 	if (atomic_xchg(&_acc_dev->open_excl, 1))
 		return -EBUSY;
 
-	_acc_dev->disconnected = 0;
+	_acc_dev->disconnected = false;
 	fp->private_data = _acc_dev;
 	return 0;
 }
@@ -1263,7 +1263,7 @@ static int acc_function_set_alt(struct usb_function *f,
 		return ret;
 	}
 
-	dev->online = 1;
+	dev->online = true;
 	dev->disconnected = 0; /* if online then not disconnected */
 
 	/* readers may be blocked waiting for us to go online */
