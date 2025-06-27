@@ -187,6 +187,10 @@ void update_external_temp_table(struct sec_battery_info *battery, int temp[])
 
 }
 
+static int sec_bat_show_cisd_data(struct sec_battery_info *battery, char *buf, int *idx);
+static int sec_bat_show_cisd_data_json(struct sec_battery_info *battery, char *buf, int *idx);
+static int sec_bat_show_cisd_data_d_json(struct sec_battery_info *battery, char *buf, int *idx);
+
 ssize_t sec_bat_show_attrs(struct device *dev,
 				  struct device_attribute *attr, char *buf)
 {
@@ -968,70 +972,13 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		break;
 #if defined(CONFIG_BATTERY_CISD)
 	case CISD_DATA:
-		{
-			struct cisd *pcisd = &battery->cisd;
-			char temp_buf[1024] = {0,};
-			int j = 0;
-
-			sprintf(temp_buf+strlen(temp_buf), "%d", pcisd->data[CISD_DATA_RESET_ALG]);
-			for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX_PER_DAY; j++)
-				sprintf(temp_buf+strlen(temp_buf), " %d", pcisd->data[j]);
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
-		}
+		i += sec_bat_show_cisd_data(battery, buf, &i);
 		break;
 	case CISD_DATA_JSON:
-		{
-			struct cisd *pcisd = &battery->cisd;
-			char temp_buf[1920] = {0,};
-			int j = 0;
-
-			sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
-					cisd_data_str[CISD_DATA_RESET_ALG], pcisd->data[CISD_DATA_RESET_ALG]);
-			for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX; j++)
-				sprintf(temp_buf+strlen(temp_buf), ",\"%s\":\"%d\"", cisd_data_str[j], pcisd->data[j]);
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
-		}
+		i += sec_bat_show_cisd_data_json(battery, buf, &i);
 		break;
 	case CISD_DATA_D_JSON:
-		{
-			struct cisd *pcisd = &battery->cisd;
-			char temp_buf[1920] = {0,};
-			int j = 0;
-
-			sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
-				cisd_data_str_d[CISD_DATA_FULL_COUNT_PER_DAY-CISD_DATA_MAX],
-				pcisd->data[CISD_DATA_FULL_COUNT_PER_DAY]);
-			for (j = CISD_DATA_FULL_COUNT_PER_DAY + 1; j < CISD_DATA_MAX_PER_DAY; j++) {
-				sprintf(temp_buf+strlen(temp_buf), ",\"%s\":\"%d\"",
-				cisd_data_str_d[j-CISD_DATA_MAX], pcisd->data[j]);
-			}
-
-			/* Clear Daily Data */
-			for (j = CISD_DATA_FULL_COUNT_PER_DAY; j < CISD_DATA_MAX_PER_DAY; j++)
-				pcisd->data[j] = 0;
-
-			pcisd->data[CISD_DATA_FULL_COUNT_PER_DAY] = 1;
-			pcisd->data[CISD_DATA_BATT_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_CHG_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_WPC_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_USB_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_BATT_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_CHG_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_WPC_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_USB_TEMP_MIN_PER_DAY] = 1000;
-
-			pcisd->data[CISD_DATA_CHG_BATT_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_CHG_CHG_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_CHG_WPC_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_CHG_USB_TEMP_MAX_PER_DAY] = -300;
-			pcisd->data[CISD_DATA_CHG_BATT_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_CHG_CHG_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_CHG_WPC_TEMP_MIN_PER_DAY] = 1000;
-			pcisd->data[CISD_DATA_CHG_USB_TEMP_MIN_PER_DAY] = 1000;
-
-			pcisd->data[CISD_DATA_CAP_MIN_PER_DAY] = 0xFFFF;
-			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
-		}
+		i += sec_bat_show_cisd_data_d_json(battery, buf, &i);
 		break;
 	case CISD_WIRE_COUNT:
 		{
@@ -1148,7 +1095,81 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 	return i;
 }
 
+static int sec_bat_show_cisd_data(struct sec_battery_info *battery, char *buf, int *idx)
+{
+	struct cisd *pcisd = &battery->cisd;
+	char temp_buf[1024] = {0,};
+	int j = 0;
+
+	sprintf(temp_buf+strlen(temp_buf), "%d", pcisd->data[CISD_DATA_RESET_ALG]);
+	for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX_PER_DAY; j++)
+		sprintf(temp_buf+strlen(temp_buf), " %d", pcisd->data[j]);
+	*idx += scnprintf(buf + *idx, PAGE_SIZE - *idx, "%s\n", temp_buf);
+
+	return *idx;
+}
+
+static int sec_bat_show_cisd_data_json(struct sec_battery_info *battery, char *buf, int *idx)
+{
+	struct cisd *pcisd = &battery->cisd;
+	char temp_buf[1920] = {0,};
+	int j = 0;
+
+	sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
+			cisd_data_str[CISD_DATA_RESET_ALG], pcisd->data[CISD_DATA_RESET_ALG]);
+	for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX; j++)
+		sprintf(temp_buf+strlen(temp_buf), ",\"%s\":\"%d\"", cisd_data_str[j], pcisd->data[j]);
+	*idx += scnprintf(buf + *idx, PAGE_SIZE - *idx, "%s\n", temp_buf);
+
+	return *idx;
+}
+
+static int sec_bat_show_cisd_data_d_json(struct sec_battery_info *battery, char *buf, int *idx)
+{
+	struct cisd *pcisd = &battery->cisd;
+	char temp_buf[1920] = {0,};
+	int j = 0;
+
+	sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
+		cisd_data_str_d[CISD_DATA_FULL_COUNT_PER_DAY-CISD_DATA_MAX],
+		pcisd->data[CISD_DATA_FULL_COUNT_PER_DAY]);
+	for (j = CISD_DATA_FULL_COUNT_PER_DAY + 1; j < CISD_DATA_MAX_PER_DAY; j++) {
+		sprintf(temp_buf+strlen(temp_buf), ",\"%s\":\"%d\"",
+		cisd_data_str_d[j-CISD_DATA_MAX], pcisd->data[j]);
+	}
+
+	/* Clear Daily Data */
+	for (j = CISD_DATA_FULL_COUNT_PER_DAY; j < CISD_DATA_MAX_PER_DAY; j++)
+		pcisd->data[j] = 0;
+
+	pcisd->data[CISD_DATA_FULL_COUNT_PER_DAY] = 1;
+	pcisd->data[CISD_DATA_BATT_TEMP_MAX_PER_DAY] = -300;
+	pcisd->data[CISD_DATA_CHG_TEMP_MAX_PER_DAY] = -300;
+	pcisd->data[CISD_DATA_WPC_TEMP_MAX_PER_DAY] = -300;
+	pcisd->data[CISD_DATA_USB_TEMP_MAX_PER_DAY] = -300;
+	pcisd->data[CISD_DATA_BATT_TEMP_MIN_PER_DAY] = 1000;
+	pcisd->data[CISD_DATA_CHG_TEMP_MIN_PER_DAY] = 1000;
+	pcisd->data[CISD_DATA_WPC_TEMP_MIN_PER_DAY] = 1000;
+	pcisd->data[CISD_DATA_USB_TEMP_MIN_PER_DAY] = 1000;
+
+	pcisd->data[CISD_DATA_CHG_BATT_TEMP_MAX_PER_DAY] = -300;
+	pcisd->data[CISD_DATA_CHG_CHG_TEMP_MAX_PER_DAY] = -300;
+	pcisd->data[CISD_DATA_CHG_WPC_TEMP_MAX_PER_DAY] = -300;
+	pcisd->data[CISD_DATA_CHG_USB_TEMP_MAX_PER_DAY] = -300;
+	pcisd->data[CISD_DATA_CHG_BATT_TEMP_MIN_PER_DAY] = 1000;
+	pcisd->data[CISD_DATA_CHG_CHG_TEMP_MIN_PER_DAY] = 1000;
+	pcisd->data[CISD_DATA_CHG_WPC_TEMP_MIN_PER_DAY] = 1000;
+	pcisd->data[CISD_DATA_CHG_USB_TEMP_MIN_PER_DAY] = 1000;
+
+	pcisd->data[CISD_DATA_CAP_MIN_PER_DAY] = 0xFFFF;
+	*idx += scnprintf(buf + *idx, PAGE_SIZE - *idx, "%s\n", temp_buf);
+
+	return *idx;
+}
+
 ssize_t sec_bat_store_attrs(
+
+
 					struct device *dev,
 					struct device_attribute *attr,
 					const char *buf, size_t count)
