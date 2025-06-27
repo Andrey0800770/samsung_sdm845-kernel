@@ -845,7 +845,7 @@ static void gen_normal_interpolation_aor(struct samsung_display_driver_data *vdd
 			if (dimming_mode_curr == SS_FLASH_DIMMING_MODE) {
 				/* FLASH_DIMMING */
 				aor_dec_curr_x10000 = aor_dec_up_x10000;
-			} else if ((dimming_mode_curr == SS_S_DIMMING_MODE)) {
+			} else if (dimming_mode_curr == SS_S_DIMMING_MODE) {
 				/* S_DIMMING */
 				aor_dec_curr_x10000 = S_DIMMING_AOR_CAL (
 						aor_dec_up_x10000,
