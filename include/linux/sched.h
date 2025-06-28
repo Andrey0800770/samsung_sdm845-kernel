@@ -2235,6 +2235,12 @@ struct task_struct {
  *
  * Do not put anything below here!
  */
+
+#ifdef CONFIG_KSU_SUSFS
+	u64 susfs_task_state;
+	u64 susfs_last_fake_mnt_id;
+#endif
+
 };
 
 #ifdef CONFIG_ARCH_WANTS_DYNAMIC_TASK_STRUCT
