@@ -1,6 +1,3 @@
-/* SPDX-License-Identifier: GPL-2.0 */
-#include <asm/page.h>
-
 /*
  * With CONFIG_LTO_CLANG, LLD always enables -fdata-sections and
  * -ffunction-sections, which increases the size of the final module.
@@ -21,13 +18,5 @@ SECTIONS {
 	.rela.rodata : { *(.rela.rodata .rela.rodata[.0-9a-zA-Z_]*) }
 	.rela.text : { *(.rela.text .rela.text[.0-9a-zA-Z_]*) }
 	.rodata : { *(.rodata .rodata[.0-9a-zA-Z_]*) }
-	
-	/*
-	 * With CFI_CLANG, ensure __cfi_check is at the beginning of the
-	 * .text section, and that the section is aligned to page size.
-	 */
-	.text : ALIGN(PAGE_SIZE) {
-		*(.text.__cfi_check)
-		*(.text .text[.0-9a-zA-Z_]* .text..L.cfi*)
-	}
+	.text : { *(.text .text[.0-9a-zA-Z_]*) }
 }
