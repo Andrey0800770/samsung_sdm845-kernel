@@ -549,7 +549,7 @@ static inline void pte_unmap(pte_t *pte) { }
 
 #define pud_none(pud)		(!pud_val(pud))
 #define pud_bad(pud)		(!(pud_val(pud) & PUD_TABLE_BIT))
-#define pud_present(pud)	pte_present(pud_pte(pud))
+#define pud_present(pud)	(pud_val(pud))
 
 static inline void set_pud(pud_t *pudp, pud_t pud)
 {
