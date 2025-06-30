@@ -512,9 +512,10 @@ static const char *find_tag_name_from_id(int id)
 	return NULL;
 }
 
-static off_t parse_buffer(char *buffer, unsigned char type, off_t pos, char *out_buf, size_t out_buf_size)
+static off_t parse_buffer(char *buffer, unsigned char type, off_t pos)
 {
 	int buf_len;
+	char buf[MAX_BUFFER_SIZE] = { '\0', };
 	off_t next = pos;
 
 	switch (type) {
@@ -523,7 +524,7 @@ static off_t parse_buffer(char *buffer, unsigned char type, off_t pos, char *out
 		int val = get_unaligned((int *)&buffer[pos]);
 
 		next += sizeof(int);
-		buf_len = scnprintf(out_buf, out_buf_size, "%d", val);
+		buf_len = scnprintf(buf, MAX_BUFFER_SIZE, "%d", val);
 		logger.func_hook_logger(buf, buf_len);
 	}
 	break;
@@ -532,7 +533,7 @@ static off_t parse_buffer(char *buffer, unsigned char type, off_t pos, char *out
 		long long val = get_unaligned((long long *)&buffer[pos]);
 
 		next += sizeof(long long);
-		buf_len = scnprintf(out_buf, out_buf_size, "%lld", val);
+		buf_len = scnprintf(buf, MAX_BUFFER_SIZE, "%lld", val);
 		logger.func_hook_logger(buf, buf_len);
 	}
 	break;
@@ -550,7 +551,7 @@ static off_t parse_buffer(char *buffer, unsigned char type, off_t pos, char *out
 		pos += sizeof(unsigned int);
 		next += sizeof(unsigned int) + len;
 
-		memcpy(out_buf, &buffer[pos], len_to_copy);
+		memcpy(buf, &buffer[pos], len_to_copy);
 		logger.func_hook_logger(buf, len_to_copy);
 	}
 	break;
@@ -626,7 +627,7 @@ static inline void __ss_logger_level_text_event_log(char *buffer, size_t count)
 		    *buffer == EVENT_TYPE_INT ||
 		    *buffer == EVENT_TYPE_FLOAT ||
 		    *buffer == EVENT_TYPE_STRING)
-			            parse_buffer(buffer, *buffer, 1, buf, MAX_BUFFER_SIZE);
+			parse_buffer(buffer, *buffer, 1);
 		else if (*buffer == EVENT_TYPE_LIST) {
 			size_t items = (size_t)buffer[1];
 			size_t i;
@@ -645,7 +646,7 @@ static inline void __ss_logger_level_text_event_log(char *buffer, size_t count)
 
 				type = buffer[pos++];
 
-				pos = parse_buffer(buffer, type, pos, buf, MAX_BUFFER_SIZE);
+				pos = parse_buffer(buffer, type, pos);
 				if (i < items -1)
 					logger.func_hook_logger(",", 1);
 			}
