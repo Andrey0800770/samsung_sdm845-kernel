@@ -29,38 +29,24 @@
  * ARMv8-a, AArch64, unaligned accesses, min page size 4k.
  */
 
-/* To test the page crossing code path more thoroughly, compile with
-   -DTEST_PAGE_CROSS - this will force all calls through the slower
-   entry path.  This option is not intended for production use.	 */
-
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 
 /* Arguments and results.  */
-#define srcin		x0
-#define len		x0
+srcin		.req	x0
+len		.req	x0
 
 /* Locals and temporaries.  */
-#define src		x1
-#define data1		x2
-#define data2		x3
-#define has_nul1	x4
-#define has_nul2	x5
-#define tmp1		x4
-#define tmp2		x5
-#define tmp3		x6
-#define tmp4		x7
-#define zeroones	x8
-
-#define L(l) .L ## l
-
-	.macro def_fn f p2align=0
-	.text
-	.p2align \p2align
-	.global \f
-	.type \f, %function
-\f:
-	.endm
+src		.req	x1
+data1		.req	x2
+data2		.req	x3
+has_nul1	.req	x4
+has_nul2	.req	x5
+tmp1		.req	x4
+tmp2		.req	x5
+tmp3		.req	x6
+tmp4		.req	x7
+zeroones	.req	x8
 
 	/* NUL detection works on the principle that (X - 1) & (~X) & 0x80
 	   (=> (X - 1) & ~(X | 0x7f)) is non-zero iff a byte is zero, and
@@ -72,11 +58,7 @@
 #define REP8_7f 0x7f7f7f7f7f7f7f7f
 #define REP8_80 0x8080808080808080
 
-#ifdef TEST_PAGE_CROSS
-# define MIN_PAGE_SIZE 15
-#else
 # define MIN_PAGE_SIZE 4096
-#endif
 
 	/* Since strings are short on average, we check the first 16 bytes
 	   of the string for a NUL character.  In order to do an unaligned ldp
@@ -103,11 +85,12 @@
 	   whether the first fetch, which may be misaligned, crosses a page
 	   boundary.  */
 
-def_fn strlen p2align=6
+ENTRY(strlen)
+.align 6
 	and	tmp1, srcin, MIN_PAGE_SIZE - 1
 	mov	zeroones, REP8_01
 	cmp	tmp1, MIN_PAGE_SIZE - 16
-	b.gt	L(page_cross)
+	b.gt	.Lpage_cross
 	ldp	data1, data2, [srcin]
 #ifdef __AARCH64EB__
 	/* For big-endian, carry propagation (if the final byte in the
@@ -124,7 +107,7 @@ def_fn strlen p2align=6
 	bics	has_nul1, tmp1, tmp2
 	bic	has_nul2, tmp3, tmp4
 	ccmp	has_nul2, 0, 0, eq
-	beq	L(main_loop_entry)
+	beq	.Lmain_loop_entry
 
 	/* Enter with C = has_nul1 == 0.  */
 	csel	has_nul1, has_nul1, has_nul2, cc
@@ -139,10 +122,10 @@ def_fn strlen p2align=6
 	   NUL check.  If we encounter non-ASCII characters, use a second
 	   loop with the accurate NUL check.  */
 	.p2align 4
-L(main_loop_entry):
+.Lmain_loop_entry:
 	bic	src, srcin, 15
 	sub	src, src, 16
-L(main_loop):
+.Lmain_loop:
 	ldp	data1, data2, [src, 32]!
 .Lpage_cross_entry:
 	sub	tmp1, data1, zeroones
@@ -155,7 +138,7 @@ L(main_loop):
 	sub	tmp3, data2, zeroones
 	orr	tmp2, tmp1, tmp3
 	tst	tmp2, zeroones, lsl 7
-	beq	L(main_loop)
+	beq	.Lmain_loop
 	add	src, src, 16
 1:
 	/* The fast check failed, so do the slower, accurate NUL check.	 */
@@ -164,10 +147,10 @@ L(main_loop):
 	bics	has_nul1, tmp1, tmp2
 	bic	has_nul2, tmp3, tmp4
 	ccmp	has_nul2, 0, 0, eq
-	beq	L(nonascii_loop)
+	beq	.Lnonascii_loop
 
 	/* Enter with C = has_nul1 == 0.  */
-L(tail):
+.Ltail:
 #ifdef __AARCH64EB__
 	/* For big-endian, carry propagation (if the final byte in the
 	   string is 0x01) means we cannot use has_nul1/2 directly.  The
@@ -189,7 +172,7 @@ L(tail):
 	add	len, len, tmp1, lsr 3
 	ret
 
-L(nonascii_loop):
+.Lnonascii_loop:
 	ldp	data1, data2, [src, 16]!
 	sub	tmp1, data1, zeroones
 	orr	tmp2, data1, REP8_7f
@@ -198,7 +181,7 @@ L(nonascii_loop):
 	bics	has_nul1, tmp1, tmp2
 	bic	has_nul2, tmp3, tmp4
 	ccmp	has_nul2, 0, 0, eq
-	bne	L(tail)
+	bne	.Ltail
 	ldp	data1, data2, [src, 16]!
 	sub	tmp1, data1, zeroones
 	orr	tmp2, data1, REP8_7f
@@ -207,13 +190,13 @@ L(nonascii_loop):
 	bics	has_nul1, tmp1, tmp2
 	bic	has_nul2, tmp3, tmp4
 	ccmp	has_nul2, 0, 0, eq
-	beq	L(nonascii_loop)
-	b	L(tail)
+	beq	.Lnonascii_loop
+	b	.Ltail
 
 	/* Load 16 bytes from [srcin & ~15] and force the bytes that precede
 	   srcin to 0x7f, so we ignore any NUL bytes before the string.
 	   Then continue in the aligned loop.  */
-L(page_cross):
+.Lpage_cross:
 	bic	src, srcin, 15
 	ldp	data1, data2, [src]
 	lsl	tmp1, srcin, 3
@@ -231,6 +214,6 @@ L(page_cross):
 	tst	srcin, 8
 	csel	data1, data1, tmp4, eq
 	csel	data2, data2, tmp2, eq
-	b	L(page_cross_entry)
+	b	.Lpage_cross_entry
 
 ENDPIPROC(strlen)
