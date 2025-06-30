@@ -1123,10 +1123,6 @@ ifneq ($(SEC_BUILD_CONF_USE_FINGERPRINT_TZ), false)
   endif
 endif
 
-ifeq ($(CONFIG_RELR),y)
-LDFLAGS_vmlinux	+= --pack-dyn-relocs=relr
-endif
-
 # Default kernel image to build when no specific target is given.
 # KBUILD_IMAGE may be overruled on the command line or
 # set in the environment
