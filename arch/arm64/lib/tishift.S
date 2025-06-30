@@ -38,19 +38,19 @@ ENTRY(__ashlti3)
 ENDPROC(__ashlti3)
 
 ENTRY(__ashrti3)
-	cbz	x2, 1f
+	cbz	x2, 3f
 	mov	x3, #64
 	sub	x3, x3, x2
 	cmp	x3, #0
-	b.le	2f
+	b.le	4f
 	lsr	x0, x0, x2
 	lsl	x3, x1, x3
 	asr	x2, x1, x2
 	orr	x0, x0, x3
 	mov	x1, x2
-1:
+3:
 	ret
-2:
+4:
 	neg	w0, w3
 	asr	x2, x1, #63
 	asr	x0, x1, x0
