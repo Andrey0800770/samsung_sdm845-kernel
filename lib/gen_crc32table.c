@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include "../include/linux/crc32poly.h"
 #include "../include/generated/autoconf.h"
 #include "crc32defs.h"
 #include <inttypes.h>
