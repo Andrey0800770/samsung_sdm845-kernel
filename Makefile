@@ -754,6 +754,10 @@ KBUILD_CFLAGS   += -O2
 endif
 endif
 
+ifeq ($(cc-name),clang)Add commentMore actions
+KBUILD_CFLAGS	+= -mno-unaligned-access -mstrict-align
+endif
+
 ifdef CONFIG_LTO_CLANG
 # Limit inlining across translation units to reduce binary size
 LD_FLAGS_LTO_CLANG := -mllvm -import-instr-limit=5
