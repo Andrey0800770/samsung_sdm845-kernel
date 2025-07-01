@@ -70,7 +70,7 @@ else
     $(error CROSS_COMPILE_ARM32 not defined or empty, the compat vDSO will not be built)
   else ifeq ($(cc-name),clang)
     export CLANG_TRIPLE_ARM32 ?= $(CROSS_COMPILE_ARM32)
-    export CLANG_TARGET_ARM32 := --target=$(notdir $(CLANG_TRIPLE_ARM32:%-=%))
+    export CLANG_TARGET_ARM32 := --target=arm-linux-gnueabi
     export GCC_TOOLCHAIN32_DIR := $(dir $(shell which $(CROSS_COMPILE_ARM32)ld))
     export GCC_TOOLCHAIN32 := $(realpath $(GCC_TOOLCHAIN32_DIR)/..)
     export CLANG_PREFIX32 := --prefix=$(GCC_TOOLCHAIN32_DIR)
@@ -87,14 +87,7 @@ else
 endif
 endif
 
-ifeq ($(cc-name),clang)
-# This is a workaround for https://bugs.llvm.org/show_bug.cgi?id=30792.
-# TODO: revert when this is fixed in LLVM.
-KBUILD_CFLAGS   += -mno-implicit-float
-else
-KBUILD_CFLAGS   += -mgeneral-regs-only
-endif
-KBUILD_CFLAGS   += $(lseinstr) $(vdso32)
+KBUILD_CFLAGS	+= -mgeneral-regs-only $(lseinstr) $(vdso32)
 KBUILD_CFLAGS	+= -fno-asynchronous-unwind-tables
 KBUILD_CFLAGS	+= $(call cc-option, -mpc-relative-literal-loads)
 KBUILD_CFLAGS	+= -fno-pic
@@ -199,7 +192,6 @@ PHONY += dtbs dtbs_install
 dtbs: prepare scripts
 #	$(Q)$(MAKE) $(build)=$(boot)/dts
 	$(Q)$(MAKE) $(build)=$(boot)/dts/samsung
-
 dtbs_install:
 	$(Q)$(MAKE) $(dtbinst)=$(boot)/dts
 
