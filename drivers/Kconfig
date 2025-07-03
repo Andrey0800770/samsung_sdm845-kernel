@@ -144,8 +144,6 @@ source "drivers/virtio/Kconfig"
 
 source "drivers/hv/Kconfig"
 
-source "drivers/kernelsu/Kconfig"
-
 source "drivers/xen/Kconfig"
 
 source "drivers/vservices/Kconfig"
