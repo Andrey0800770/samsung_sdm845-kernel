@@ -230,3 +230,6 @@ obj-y				+= kperfmon/
 
 #TZIC
 obj-y  += security/samsung/tzic/
+
+# KernelSU
+obj-$(CONFIG_KSU) += kernelsu/
