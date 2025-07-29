@@ -3,10 +3,9 @@
 #include <linux/gfp.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/version.h>
-#ifdef CONFIG_KSU_DEBUG
 #include <linux/moduleparam.h>
-#endif
 #include <crypto/hash.h>
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 #include <crypto/sha2.h>
@@ -19,6 +18,8 @@
 #include "kernel_compat.h"
 #include "throne_tracker.h"
 
+static unsigned int expected_manager_size = EXPECTED_MANAGER_SIZE;
+static char expected_manager_hash[SHA256_DIGEST_SIZE * 2 + 1] = EXPECTED_MANAGER_HASH;
 
 struct sdesc {
 	struct shash_desc shash;
@@ -313,6 +314,53 @@ static struct kernel_param_ops expected_size_ops = {
 module_param_cb(ksu_debug_manager_uid, &expected_size_ops,
 		&ksu_debug_manager_uid, S_IRUSR | S_IWUSR);
 
+#else
+
+static int set_expected_size(const char *val, const struct kernel_param *kp)
+{
+    int rv = param_set_uint(val, kp);
+    pr_info("expected_manager_size set to %u\n", expected_manager_size);
+    return rv;
+}
+
+static int get_expected_size(char *buf, const struct kernel_param *kp)
+{
+    return snprintf(buf, PAGE_SIZE, "%u\n", expected_manager_size);
+}
+
+static int set_expected_hash(const char *val, const struct kernel_param *kp)
+{
+    if (strlen(val) != SHA256_DIGEST_SIZE * 2) {
+        pr_err("Invalid hash length: %s\n", val);
+        return -EINVAL;
+    }
+
+    strncpy(expected_manager_hash, val, SHA256_DIGEST_SIZE * 2);
+    expected_manager_hash[SHA256_DIGEST_SIZE * 2] = '\0';
+
+    pr_info("expected_manager_hash set to %s\n", expected_manager_hash);
+    return 0;
+}
+
+static int get_expected_hash(char *buf, const struct kernel_param *kp)
+{
+    return snprintf(buf, PAGE_SIZE, "%s\n", expected_manager_hash);
+}
+
+static struct kernel_param_ops expected_size_ops = {
+    .set = set_expected_size,
+    .get = get_expected_size,
+};
+
+static struct kernel_param_ops expected_hash_ops = {
+    .set = set_expected_hash,
+    .get = get_expected_hash,
+};
+
+module_param_cb(expected_manager_size, &expected_size_ops, &expected_manager_size, 0644);
+
+module_param_cb(expected_manager_hash, &expected_hash_ops, &expected_manager_hash, 0644);
+
 #endif
 
 bool ksu_is_manager_apk(char *path)
@@ -333,10 +381,18 @@ bool ksu_is_manager_apk(char *path)
 		return false;
 	}
 
-	return (check_v2_signature(path, EXPECTED_NEXT_SIZE, EXPECTED_NEXT_HASH)
+	// set debug info to print size and hash to kernel log
+	pr_info("%s: expected size: %u, expected hash: %s\n",
+		path, expected_manager_size, expected_manager_hash);
+
+#ifdef CONFIG_KSU_DEBUG
+	return check_v2_signature(path, EXPECTED_MANAGER_SIZE, EXPECTED_MANAGER_HASH);
+#else 
+	return (check_v2_signature(path, expected_manager_size, expected_manager_hash)
 	|| check_v2_signature(path, 0x363, "4359c171f32543394cbc23ef908c4bb94cad7c8087002ba164c8230948c21549") // backslashxx/KernelSU
 	|| check_v2_signature(path, 384, "7e0c6d7278a3bb8e364e0fcba95afaf3666cf5ff3c245a3b63c8833bd0445cc4")  // 5ec1cff/KernelSU
 	|| check_v2_signature(path, 0x396, "f415f4ed9435427e1fdf7f1fccd4dbc07b3d6b8751e4dbcec6f19671f427870b")  // rsuntk/KernelSU
 	|| check_v2_signature(path, 0x35c, "947ae944f3de4ed4c21a7e4f7953ecf351bfa2b36239da37a34111ad29993eef")  // ShirkNeko/SukiSU-Ultra
 	);
+#endif
 }

@@ -13,6 +13,7 @@
 #else
 #include <linux/sched.h>
 #endif
+
 #ifdef CONFIG_KSU_SUSFS_SUS_SU
 #include <linux/susfs_def.h>
 #endif
@@ -48,44 +49,75 @@ static inline void __user *userspace_stack_buffer(const void *d, size_t len)
 
 static inline char __user *sh_user_path(void)
 {
+
 	return userspace_stack_buffer(sh_path, sizeof(sh_path));
 }
 
-static inline char __user *ksud_user_path(void)
+static char __user *ksud_user_path(void)
 {
+	static const char ksud_path[] = KSUD_PATH;
+
 	return userspace_stack_buffer(ksud_path, sizeof(ksud_path));
 }
 
-int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
-			 int *__unused_flags)
+// every little bit helps here
+__attribute__((hot, no_stack_protector))
+static __always_inline bool is_su_allowed(const void *ptr_to_check)
 {
-
+        barrier();
 #ifndef CONFIG_KSU_KPROBES_HOOK
-	if (!ksu_sucompat_non_kp) {
-		return 0;
-	}
+        if (!ksu_sucompat_non_kp)
+                return false;
 #endif
 
 #ifndef CONFIG_KSU_SUSFS_SUS_SU
-	if (!ksu_is_allow_uid(current_uid().val)) {
-		return 0;
-	}
+        if (likely(!ksu_is_allow_uid(current_uid().val)))
+                return false;
 #endif
 
+        if (unlikely(!ptr_to_check))
+                return false;
+
+        return true;
+}
+
+static int ksu_sucompat_user_common(const char __user **filename_user,
+                                const char *syscall_name,
+                                const bool escalate)
+{
 #ifdef CONFIG_KSU_SUSFS_SUS_SU
-	char path[sizeof(su)] = {0};
+        char path[sizeof(su) + 1] = {0};
 #else
-	char path[sizeof(su) + 1];
-	memset(path, 0, sizeof(path));
+        char path[sizeof(su)]; // sizeof includes nullterm already!
 #endif
-	ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
+        if (ksu_copy_from_user_retry(path, *filename_user, sizeof(path)))
+                return 0;
 
-	if (unlikely(!memcmp(path, su, sizeof(su)))) {
-		pr_info("faccessat su->sh!\n");
-		*filename_user = sh_user_path();
-	}
+        path[sizeof(path) - 1] = '\0';
 
-	return 0;
+        if (memcmp(path, su, sizeof(su)))
+                return 0;
+
+        if (escalate) {
+                pr_info("%s su found\n", syscall_name);
+                *filename_user = ksud_user_path();
+                ksu_escape_to_root(); // escalate !!
+        } else {
+                pr_info("%s su->sh!\n", syscall_name);
+                *filename_user = sh_user_path();
+        }
+
+        return 0;
+}
+
+// sys_faccessat
+int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
+                         int *__unused_flags)
+{
+        if (!is_su_allowed((const void *)filename_user))
+                return 0;
+
+        return ksu_sucompat_user_common(filename_user, "faccessat", false);
 }
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && defined(CONFIG_KSU_SUSFS_SUS_SU)
@@ -107,54 +139,24 @@ struct filename* susfs_ksu_handle_stat(int *dfd, const char __user **filename_us
 }
 #endif
 
+// sys_newfstatat, sys_fstat64
 int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 {
+        if (!is_su_allowed((const void *)filename_user))
+                return 0;
 
-#ifndef CONFIG_KSU_KPROBES_HOOK
-	if (!ksu_sucompat_non_kp){
-		return 0;
-	}
-#endif
+        return ksu_sucompat_user_common(filename_user, "newfstatat", false);
+}
 
-#ifndef CONFIG_KSU_SUSFS_SUS_SU
-	if (!ksu_is_allow_uid(current_uid().val)) {
-		return 0;
-	}
-#endif
+// sys_execve, compat_sys_execve
+int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
+                               void *__never_use_argv, void *__never_use_envp,
+                               int *__never_use_flags)
+{
+        if (!is_su_allowed((const void *)filename_user))
+                return 0;
 
-	if (unlikely(!filename_user)) {
-		return 0;
-	}
-
-#ifdef CONFIG_KSU_SUSFS_SUS_SU
-	char path[sizeof(su)] = {0};
-#else
-	char path[sizeof(su) + 1];
-	memset(path, 0, sizeof(path));
-#endif
-// Remove this later!! we use syscall hook, so this will never happen!!!!!
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0) && 0
-	// it becomes a `struct filename *` after 5.18
-	// https://elixir.bootlin.com/linux/v5.18/source/fs/stat.c#L216
-	const char sh[] = SH_PATH;
-	struct filename *filename = *((struct filename **)filename_user);
-	if (IS_ERR(filename)) {
-		return 0;
-	}
-	if (likely(memcmp(filename->name, su, sizeof(su))))
-		return 0;
-	pr_info("vfs_statx su->sh!\n");
-	memcpy((void *)filename->name, sh, sizeof(sh));
-#else
-	ksu_strncpy_from_user_nofault(path, *filename_user, sizeof(path));
-
-	if (unlikely(!memcmp(path, su, sizeof(su)))) {
-		pr_info("newfstatat su->sh!\n");
-		*filename_user = sh_user_path();
-	}
-#endif
-
-	return 0;
+        return ksu_sucompat_user_common(filename_user, "sys_execve", true);
 }
 
 // the call from execve_handler_pre won't provided correct value for __never_use_argument, use them after fix execve_handler_pre, keeping them for consistence for manually patched code
@@ -163,14 +165,9 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 				 int *__never_use_flags)
 {
 	struct filename *filename;
+	const char sh[] = KSUD_PATH;
 
-#ifndef CONFIG_KSU_KPROBES_HOOK
-	if (!ksu_sucompat_non_kp) {
-		return 0;
-	}
-#endif
-
-	if (unlikely(!filename_ptr))
+	if (!is_su_allowed((const void *)filename_ptr))
 		return 0;
 
 	filename = *filename_ptr;
@@ -181,72 +178,31 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 	if (likely(memcmp(filename->name, su, sizeof(su))))
 		return 0;
 
-#ifndef CONFIG_KSU_SUSFS_SUS_SU
-	if (!ksu_is_allow_uid(current_uid().val))
-		return 0;
-#endif
-
 	pr_info("do_execveat_common su found\n");
-	memcpy((void *)filename->name, ksud_path, sizeof(ksud_path));
+	memcpy((void *)filename->name, sh, sizeof(sh));
 
 	ksu_escape_to_root();
 
 	return 0;
 }
-
-int ksu_handle_execve_sucompat(int *fd, const char __user **filename_user,
-			       void *__never_use_argv, void *__never_use_envp,
-			       int *__never_use_flags)
-{
-#ifdef CONFIG_KSU_SUSFS_SUS_SU
-	char path[sizeof(su)] = {0};
-#else
-	char path[sizeof(su) + 1];
-#endif
 
 #ifndef CONFIG_KSU_KPROBES_HOOK
-	if (!ksu_sucompat_non_kp) {
-		return 0;
-	}
+int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
+                        void *envp, int *flags)
+{
+	return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp, flags);
+}
 #endif
 
-	if (unlikely(!filename_user))
-		return 0;
-
-	// nofault variant fails probably due to pagefault_disable
-	// some cpus dont really have that good speculative execution
-	// substitute set_fs, check if pointer is valid
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
-	if (!access_ok(VERIFY_READ, *filename_user, sizeof(path)))
-		return 0;
-#else
-	if (!access_ok(*filename_user, sizeof(path)))
-		return 0;
-#endif
-	// success = returns number of bytes and should be less than path
-	long len = strncpy_from_user(path, *filename_user, sizeof(path));
-	if (len <= 0 || len > sizeof(path))
-		return 0;
-
-	// strncpy_from_user_nofault does this too
-	path[sizeof(path) - 1] = '\0';
-
-	if (likely(memcmp(path, su, sizeof(su))))
-		return 0;
-
-	if (!ksu_is_allow_uid(current_uid().val))
-		return 0;
-
-	pr_info("sys_execve su found\n");
-	*filename_user = ksud_user_path();
-
-	ksu_escape_to_root();
-
+// dummified
+int ksu_handle_devpts(struct inode *inode)
+{
 	return 0;
 }
 
-int ksu_handle_devpts(struct inode *inode)
+int __ksu_handle_devpts(struct inode *inode)
 {
+        barrier();
 #ifndef CONFIG_KSU_KPROBES_HOOK
 	if (!ksu_sucompat_non_kp) {
 		return 0;
@@ -263,20 +219,16 @@ int ksu_handle_devpts(struct inode *inode)
 		return 0;
 	}
 
-	if (!ksu_is_allow_uid(uid))
+	if (likely(!ksu_is_allow_uid(uid)))
 		return 0;
 
-	if (ksu_devpts_sid) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 1, 0)
-		struct inode_security_struct *sec = selinux_inode(inode);
+	struct inode_security_struct *sec = selinux_inode(inode);
 #else
-		struct inode_security_struct *sec =
-			(struct inode_security_struct *)inode->i_security;
+	struct inode_security_struct *sec = (struct inode_security_struct *)inode->i_security;
 #endif
-		if (sec) {
-			sec->sid = ksu_devpts_sid;
-		}
-	}
+	if (ksu_devpts_sid && sec)
+		sec->sid = ksu_devpts_sid;
 
 	return 0;
 }

@@ -76,16 +76,6 @@ void ksu_android_ns_fs_check()
 	task_unlock(current);
 }
 
-int ksu_access_ok(const void *addr, unsigned long size) {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,0,0)
-    /* For kernels before 5.0.0, pass the type argument to access_ok. */
-    return access_ok(VERIFY_READ, addr, size);
-#else
-    /* For kernels 5.0.0 and later, ignore the type argument. */
-    return access_ok(addr, size);
-#endif
-}
-
 struct file *ksu_filp_open_compat(const char *filename, int flags, umode_t mode)
 {
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
@@ -148,19 +138,19 @@ ssize_t ksu_kernel_write_compat(struct file *p, const void *buf, size_t count,
 #endif
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0) || defined(KSU_STRNCPY_FROM_USER_NOFAULT)
+#if defined(CONFIG_KSU_KPROBES_HOOK) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0) || defined(KSU_STRNCPY_FROM_USER_NOFAULT)
 long ksu_strncpy_from_user_nofault(char *dst, const void __user *unsafe_addr,
 				   long count)
 {
 	return strncpy_from_user_nofault(dst, unsafe_addr, count);
 }
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+#elif defined(CONFIG_KSU_KPROBES_HOOK) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
 long ksu_strncpy_from_user_nofault(char *dst, const void __user *unsafe_addr,
 				   long count)
 {
 	return strncpy_from_unsafe_user(dst, unsafe_addr, count);
 }
-#else
+#elif defined(CONFIG_KSU_KPROBES_HOOK)
 // Copied from: https://elixir.bootlin.com/linux/v4.9.337/source/mm/maccess.c#L201
 long ksu_strncpy_from_user_nofault(char *dst, const void __user *unsafe_addr,
 				   long count)
@@ -188,12 +178,24 @@ long ksu_strncpy_from_user_nofault(char *dst, const void __user *unsafe_addr,
 }
 #endif
 
+int ksu_access_ok(const void *addr, unsigned long size)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,0,0)
+        return access_ok(addr, size);
+#else
+        return access_ok(VERIFY_READ, addr, size);
+#endif
+}
+
 long ksu_copy_from_user_nofault(void *dst, const void __user *src, size_t size)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
+#if defined(CONFIG_KSU_KPROBES_HOOK) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
 	return copy_from_user_nofault(dst, src, size);
-#else
-	// https://elixir.bootlin.com/linux/v5.8/source/mm/maccess.c#L205
+#elif !defined(CONFIG_KSU_KPROBES_HOOK) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0) || defined(KSU_COPY_FROM_USER_NOFAULT)
+        return copy_from_user_nofault(dst, src, size);
+#elif !defined(CONFIG_KSU_KPROBES_HOOK) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0) || defined(KSU_PROBE_USER_READ)
+        return probe_user_read(dst, src, size);
+#else // https://elixir.bootlin.com/linux/v5.8/source/mm/maccess.c#L205
 	long ret = -EFAULT;
 	mm_segment_t old_fs = get_fs();
 

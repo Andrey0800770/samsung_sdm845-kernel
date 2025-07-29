@@ -13,7 +13,7 @@ config KSU_KPROBES_HOOK
 	bool "Use kprobes for kernelsu"
 	depends on KSU
 	depends on KPROBES
-	default y
+	default n
 	help
 	  Disable if you use manual hooks.
 
@@ -52,6 +52,7 @@ config KSU_SUSFS
 config KSU_SUSFS_HAS_MAGIC_MOUNT
     bool "Say yes if the current KernelSU repo has magic mount implemented (default y)"
     depends on KSU
+    depends on KSU_SUSFS
     default y
     help
       - Enable to indicate that the current SUSFS kernel supports the auto hide features for 5ec1cff's Magic Mount KernelSU
@@ -76,7 +77,7 @@ config KSU_SUSFS_SUS_MOUNT
       - Allow hiding the user-defined mount paths from /proc/self/[mounts|mountinfo|mountstat].
       - Effective on all processes for hiding mount entries.
       - Mounts mounted by process with ksu domain will be forced to be assigned the dev name "KSU".
-      - mnt_id and mnt_group_id of the sus mount will be assigned to a much bigger number to solve the issue of id not being contiguous.  
+      - mnt_id and mnt_group_id of the sus mount will be assigned to a much bigger number to solve the issue of id not being contiguous.
 
 config KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
     bool "Enable to hide KSU's default mounts automatically (experimental)"
@@ -128,7 +129,7 @@ config KSU_SUSFS_SPOOF_UNAME
     help
       - Allow spoofing the string returned by uname syscall to user-defined string.
       - Effective on all processes.
-      
+
 config KSU_SUSFS_ENABLE_LOG
     bool "Enable logging susfs log to kernel"
     depends on KSU_SUSFS
@@ -163,12 +164,12 @@ config KSU_SUSFS_OPEN_REDIRECT
 
 config KSU_SUSFS_SUS_SU
     bool "Enable SUS-SU in runtime temporarily"
-    depends on KSU_SUSFS && KPROBES && HAVE_KPROBES && KPROBE_EVENTS
-    default y
+    depends on KSU_SUSFS && KPROBES && HAVE_KPROBES && KPROBE_EVENTS && KSU_KPROBES_HOOK
+    default n
     help
       - Allow user to enable or disable core ksu kprobes hooks temporarily in runtime. There are 2 working modes for sus_su.
       - Mode 0 (default): Disable sus_su, and enable ksu kprobe hooks for su instead.
-      - Mode 1 (deprecated): 
+      - Mode 1 (deprecated):
       - Mode 2: Enable sus_su, and disable ksu kprobe hooks for su, which means the kernel inline hooks are enabled,
                 the same as the su implementaion of non-gki kernel without kprobe supported.
       - Only apps with root access granted by ksu manager are allowed to get root.

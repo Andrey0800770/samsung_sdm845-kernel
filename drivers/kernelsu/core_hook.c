@@ -49,11 +49,8 @@
 #include "manager.h"
 #include "selinux/selinux.h"
 #include "throne_tracker.h"
+#include "throne_tracker.h"
 #include "kernel_compat.h"
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0) || defined(KSU_COMPAT_GET_CRED_RCU)
-#define KSU_GET_CRED_RCU
-#endif
 
 #ifdef CONFIG_KSU_LSM_SECURITY_HOOKS
 #define LSM_HANDLER_TYPE static int
@@ -73,9 +70,12 @@ bool susfs_is_allow_su(void)
 
 extern u32 susfs_zygote_sid;
 extern bool susfs_is_mnt_devname_ksu(struct path *path);
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+extern void susfs_run_sus_path_loop(uid_t uid);
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
 extern bool susfs_is_log_enabled __read_mostly;
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
 #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
 extern void susfs_run_try_umount_for_current_mnt_ns(void);
 #endif // #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
@@ -225,15 +225,14 @@ void ksu_escape_to_root(void)
 {
 	struct cred *cred;
 
-	cred = prepare_creds();
-	if (!cred) {
-		pr_warn("prepare_creds failed!\n");
+	if (current_euid().val == 0) {
+		pr_warn("Already root, don't escape!\n");
 		return;
 	}
 
-	if (cred->euid.val == 0) {
-		pr_warn("Already root, don't escape!\n");
-		abort_creds(cred);
+	cred = prepare_creds();
+	if (!cred) {
+		pr_warn("prepare_creds failed!\n");
 		return;
 	}
 
@@ -282,7 +281,7 @@ void ksu_escape_to_root(void)
 	ksu_setup_selinux(profile->selinux_domain);
 }
 
-int ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
+LSM_HANDLER_TYPE ksu_handle_rename(struct dentry *old_dentry, struct dentry *new_dentry)
 {
 	if (!current->mm) {
 		// skip kernel threads
@@ -341,7 +340,35 @@ static void nuke_ext4_sysfs() {
 	path_put(&path);
 }
 
-int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+static bool is_system_bin_su(void)
+{
+    static const char *su_paths[] = {
+        "/system/bin/su",
+        "/vendor/bin/su",
+        "/product/bin/su",
+        "/system_ext/bin/su",
+		"/odm/bin/su",
+		"/system/xbin/su",
+		"/system_ext/xbin/su"
+    };
+    char path_buf[256];
+    char *pathname;
+    int i;
+
+    struct mm_struct *mm = current->mm;
+    if (mm && mm->exe_file) {
+        pathname = d_path(&mm->exe_file->f_path, path_buf, sizeof(path_buf));
+        if (!IS_ERR(pathname)) {
+            for (i = 0; i < ARRAY_SIZE(su_paths); i++) {
+                if (strcmp(pathname, su_paths[i]) == 0)
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
+LSM_HANDLER_TYPE ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 		     unsigned long arg4, unsigned long arg5)
 {
 	// if success, we modify the arg5 as result!
@@ -363,10 +390,18 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 	bool from_root = 0 == current_uid().val;
 	bool from_manager = ksu_is_manager();
 
+#ifdef CONFIG_KSU_KPROBES_HOOK
+	if (!from_root && !from_manager 
+		&& !(is_allow_su() && is_system_bin_su())) {
+		// only root or manager can access this interface
+		return 0;
+	}
+#else
 	if (!from_root && !from_manager) {
 		// only root or manager can access this interface
 		return 0;
 	}
+#endif
 
 #ifdef CONFIG_KSU_DEBUG
 	pr_info("option: 0x%x, cmd: %ld\n", option, arg2);
@@ -535,6 +570,38 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 		return 0;
 	}
 
+#ifdef CONFIG_KSU_KPROBES_HOOK
+	if (arg2 == CMD_ENABLE_SU) {
+               bool enabled = (arg3 != 0);
+               if (enabled == ksu_su_compat_enabled) {
+                       pr_info("cmd enable su but no need to change.\n");
+                       if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
+                               pr_err("prctl reply error, cmd: %lu\n", arg2);
+                       }
+                       return 0;
+               }
+
+               if (enabled) {
+#ifdef CONFIG_KSU_SUSFS_SUS_SU
+                       // We disable all sus_su hook whenever user toggle on su_kps
+                       susfs_is_sus_su_hooks_enabled = false;
+                       ksu_devpts_hook = false;
+                       susfs_sus_su_working_mode = SUS_SU_DISABLED;
+#endif
+                       ksu_sucompat_init();
+               } else {
+                       ksu_sucompat_exit();
+               }
+               ksu_su_compat_enabled = enabled;
+
+               if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
+                       pr_err("prctl reply error, cmd: %lu\n", arg2);
+               }
+
+               return 0;
+       }
+#endif
+
 #ifdef CONFIG_KSU_SUSFS
 	if (current_uid_val == 0) {
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
@@ -550,6 +617,22 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 			}
 			error = susfs_add_sus_path((struct st_susfs_sus_path __user*)arg3);
 			pr_info("susfs: CMD_SUSFS_ADD_SUS_PATH -> ret: %d\n", error);
+			if (copy_to_user((void __user*)arg5, &error, sizeof(error)))
+				pr_info("susfs: copy_to_user() failed\n");
+			return 0;
+		}
+		if (arg2 == CMD_SUSFS_ADD_SUS_PATH_LOOP) {
+			int error = 0;
+			if (!ksu_access_ok((void __user*)arg3, sizeof(struct st_susfs_sus_path))) {
+				pr_err("susfs: CMD_SUSFS_ADD_SUS_PATH_LOOP -> arg3 is not accessible\n");
+				return 0;
+			}
+			if (!ksu_access_ok((void __user*)arg5, sizeof(error))) {
+				pr_err("susfs: CMD_SUSFS_ADD_SUS_PATH_LOOP -> arg5 is not accessible\n");
+				return 0;
+			}
+			error = susfs_add_sus_path_loop((struct st_susfs_sus_path __user*)arg3);
+			pr_info("susfs: CMD_SUSFS_ADD_SUS_PATH_LOOP -> ret: %d\n", error);
 			if (copy_to_user((void __user*)arg5, &error, sizeof(error)))
 				pr_info("susfs: copy_to_user() failed\n");
 			return 0;
@@ -934,36 +1017,32 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
 		}
 		return 0;
 	}
-
+#ifndef CONFIG_KSU_KPROBES_HOOK
 	if (arg2 == CMD_ENABLE_SU) {
-		bool enabled = (arg3 != 0);
-		if (enabled == ksu_su_compat_enabled) {
-			pr_info("cmd enable su but no need to change.\n");
-			if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
-				pr_err("prctl reply error, cmd: %lu\n", arg2);
-			}
-			return 0;
-		}
+               bool enabled = (arg3 != 0);
+               if (enabled == ksu_su_compat_enabled) {
+                       pr_info("cmd enable su but no need to change.\n");
+                       if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {// return the reply_ok directly
+                               pr_err("prctl reply error, cmd: %lu\n", arg2);
+                       }
+                       return 0;
+               }
 
-		if (enabled) {
-#ifdef CONFIG_KSU_SUSFS_SUS_SU
-			// We disable all sus_su hook whenever user toggle on su_kps
-			susfs_is_sus_su_hooks_enabled = false;
-			ksu_devpts_hook = false;
-			susfs_sus_su_working_mode = SUS_SU_DISABLED;
+               if (enabled) {
+                       ksu_sucompat_init();
+               } else {
+                       ksu_sucompat_exit();
+               }
+               ksu_su_compat_enabled = enabled;
+
+               if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
+                       pr_err("prctl reply error, cmd: %lu\n", arg2);
+               }
+
+               return 0;
+       }
 #endif
-			ksu_sucompat_init();
-		} else {
-			ksu_sucompat_exit();
-		}
-		ksu_su_compat_enabled = enabled;
 
-		if (copy_to_user(result, &reply_ok, sizeof(reply_ok))) {
-			pr_err("prctl reply error, cmd: %lu\n", arg2);
-		}
-
-		return 0;
-	}
 
 	return 0;
 }
@@ -1039,7 +1118,7 @@ static void ksu_try_umount(const char *mnt, bool check_mnt, int flags)
 	if (susfs_is_log_enabled) {
 		pr_info("susfs: umounting '%s' for uid: %d\n", mnt, uid);
 	}
-#endif	
+#endif
 
 	err = ksu_umount_mnt(&path, flags);
 	if (err) {
@@ -1064,7 +1143,7 @@ void susfs_try_umount_all(uid_t uid) {
 }
 #endif
 
-int ksu_handle_setuid(struct cred *new, const struct cred *old)
+LSM_HANDLER_TYPE ksu_handle_setuid(struct cred *new, const struct cred *old)
 {
 	// this hook is used for umounting overlayfs for some uid, if there isn't any module mounted, just ignore it!
 	if (!ksu_module_mounted) {
@@ -1086,16 +1165,17 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 #ifdef CONFIG_KSU_SUSFS
 	// check if current process is zygote
 	bool is_zygote_child = susfs_is_sid_equal(old->security, susfs_zygote_sid);
+#endif // #ifdef CONFIG_KSU_SUSFS
 	if (likely(is_zygote_child)) {
 		// if spawned process is non user app process
 		if (unlikely(new_uid.val < 10000 && new_uid.val >= 1000)) {
 #ifdef CONFIG_KSU_SUSFS_SUS_SU
-			// set flag if zygote spawned system process is allowed for root access
-			if (!ksu_is_allow_uid(new_uid.val)) {
-				task_lock(current);
+		        // set flag if zygote spawned system process is allowed for root access
+		        if (!ksu_is_allow_uid(new_uid.val)) {
+			        task_lock(current);
 				susfs_set_current_proc_su_not_allowed();
-				task_unlock(current);
-			}
+			        task_unlock(current);
+		        }
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_SU
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 			// umount for the system process if path DATA_ADB_UMOUNT_FOR_ZYGOTE_SYSTEM_PROCESS exists
@@ -1104,6 +1184,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 			}
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 		}
+#ifdef CONFIG_KSU_SUSFS
 		// - here we check if uid is a isolated service spawned by zygote directly
 		// - Apps that do not use "useAppZyogte" to start a isolated service will be directly
 		//   spawned by zygote which KSU will ignore it by default, the only fix for now is to
@@ -1116,8 +1197,11 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 			susfs_set_current_non_root_user_app_proc();
 #ifdef CONFIG_KSU_SUSFS_SUS_SU
 			susfs_set_current_proc_su_not_allowed();
-#endif
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_SU
 			task_unlock(current);
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+			susfs_run_sus_path_loop(new_uid.val);
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 			if (susfs_is_umount_for_zygote_iso_service_enabled) {
 				goto out_susfs_try_umount_all;
@@ -1144,6 +1228,9 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
 		susfs_set_current_proc_su_not_allowed();
 #endif // #ifdef CONFIG_KSU_SUSFS_SUS_SU
 		task_unlock(current);
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+		susfs_run_sus_path_loop(new_uid.val);
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 	}
 #endif // #ifdef CONFIG_KSU_SUSFS
 
@@ -1200,6 +1287,7 @@ out_susfs_try_umount_all:
 	ksu_try_umount("/apex/com.android.art/bin/dex2oat64", false, MNT_DETACH);
 	ksu_try_umount("/apex/com.android.art/bin/dex2oat32", false, MNT_DETACH);
 #endif
+
 	return 0;
 }
 
@@ -1272,14 +1360,17 @@ __maybe_unused int ksu_kprobe_exit(void)
 	return 0;
 }
 
+#ifndef DEVPTS_SUPER_MAGIC
+#define DEVPTS_SUPER_MAGIC	0x1cd1
+#endif
+
 extern int ksu_handle_devpts(struct inode *inode); // sucompat.c
 
-static int ksu_inode_permission(struct inode *inode, int mask)
+LSM_HANDLER_TYPE ksu_inode_permission(struct inode *inode, int mask)
 {
-	if (unlikely(inode->i_sb && inode->i_sb->s_magic == DEVPTS_SUPER_MAGIC)) {
-#ifdef CONFIG_KSU_DEBUG
-		pr_info("%s: devpts inode accessed with mask: %x\n", __func__, mask);
-#endif
+	if (inode && inode->i_sb
+		&& unlikely(inode->i_sb->s_magic == DEVPTS_SUPER_MAGIC)) {
+		//pr_info("%s: handling devpts for: %s \n", __func__, current->comm);
 		ksu_handle_devpts(inode);
 	}
 	return 0;
@@ -1287,7 +1378,7 @@ static int ksu_inode_permission(struct inode *inode, int mask)
 
 // kernel 4.9 and older
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 10, 0) || defined(CONFIG_IS_HW_HISI) || defined(CONFIG_KSU_ALLOWLIST_WORKAROUND)
-int ksu_key_permission(key_ref_t key_ref, const struct cred *cred,
+LSM_HANDLER_TYPE ksu_key_permission(key_ref_t key_ref, const struct cred *cred,
 			      unsigned perm)
 {
 	if (init_session_keyring != NULL) {
