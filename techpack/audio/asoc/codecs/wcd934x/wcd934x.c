@@ -6331,7 +6331,7 @@ static SOC_ENUM_SINGLE_DECL(cf_int8_1_enum, WCD934X_CDC_RX8_RX_PATH_CFG2, 0,
 							rx_cf_text);
 static SOC_ENUM_SINGLE_DECL(cf_int8_2_enum, WCD934X_CDC_RX8_RX_PATH_MIX_CFG, 2,
 							rx_cf_text);
-
+#ifdef CONFIG_TAVIL_IMPEDANCE_CONTROL
 static int tavil_impedance_vol_get(struct snd_kcontrol *kcontrol,
 		      struct snd_ctl_elem_value *ucontrol)
 {
@@ -6385,6 +6385,7 @@ static int tavil_impedance_vol_put(struct snd_kcontrol *kcontrol,
 
 	return ret;
 }
+#endif
 
 static const char * const dmic_rate_override_text[] = {
 	"DISABLED", "R_4P8_MHZ", "R_3P2_MHZ", "R_2P4_MHZ",
