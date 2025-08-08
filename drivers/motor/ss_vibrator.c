@@ -35,6 +35,17 @@
 #define PACKET_MAX_SIZE		1000
 #define MAX_LEN_VIB_TYPE 32
 
+static int user_max_intensity = DEFAULT_INTENSITY;
+
+static int apply_user_limit(int intensity) {
+    if (intensity > user_max_intensity) {
+        pr_info("[VIB]: Limiting intensity from %d to user max %d\n", 
+                intensity, user_max_intensity);
+        return user_max_intensity;
+    }
+    return intensity;
+}
+
 struct pm_qos_request pm_qos_req;
 static struct wake_lock vib_wake_lock;
 
@@ -146,8 +157,9 @@ void vibe_set_intensity(int intensity)
 			intensity = MAX_INTENSITY;
 			pr_err("[VIB] used wrong intensity, force set [%d]\n", MAX_INTENSITY);
 		}
-		intensity = (intensity / 100);	// 100 = 10000 / 100
-
+        intensity = apply_user_limit(intensity);
+		
+        intensity = (intensity / 100);
 		vibe_set_pwm_freq(intensity);
 		vibe_pwm_onoff(1);
 	}
@@ -668,26 +680,38 @@ static ssize_t store_vib_tuning(struct device *dev,
 static DEVICE_ATTR(vib_tuning, 0660, show_vib_tuning, store_vib_tuning);
 
 static ssize_t intensity_store(struct device *dev,
-		struct device_attribute *devattr, const char *buf, size_t count)
+        struct device_attribute *devattr, const char *buf, size_t count)
 {
-	struct ss_vib *vib = dev_get_drvdata(dev);
-	int ret = 0, set_intensity = 0;
+    struct ss_vib *vib = dev_get_drvdata(dev);
+    int ret = 0, set_intensity = 0;
+    int internal_intensity;
 
-	ret = kstrtoint(buf, 0, &set_intensity);
-	if (ret) {
-		pr_err("[VIB]: %s failed to get intensity", __func__);
-		return ret;
-	}
+    ret = kstrtoint(buf, 0, &set_intensity);
+    if (ret) {
+        pr_err("[VIB]: %s failed to get intensity", __func__);
+        return ret;
+    }
 
-	if ((set_intensity < 0) || (set_intensity > (MAX_INTENSITY / 100))) {
-		pr_err("[VIB]: %sout of rage\n", __func__);
-		return -EINVAL;
-	}
+    if ((set_intensity < 0) || (set_intensity > (MAX_INTENSITY / 100))) {
+        pr_err("[VIB]: %s out of range\n", __func__);
+        return -EINVAL;
+    }
 
-	vibe_set_intensity((set_intensity * 100));
-	vib->intensity = (set_intensity * 100);
+    internal_intensity = set_intensity * 100;
+    
+    user_max_intensity = internal_intensity;
+    pr_info("[VIB]: User max intensity set to %d\n", user_max_intensity);
+    
+    vibe_set_intensity(internal_intensity);
+    vib->intensity = internal_intensity;
 
-	return count;
+    if (vib->force_touch_intensity > user_max_intensity) {
+        vib->force_touch_intensity = user_max_intensity;
+        pr_info("[VIB]: Force touch intensity adjusted to user limit: %d\n", 
+                vib->force_touch_intensity);
+    }
+
+    return count;
 }
 
 static ssize_t intensity_show(struct device *dev,
@@ -731,26 +755,31 @@ static DEVICE_ATTR(pwm_value, 0644, intensity_show, intensity_store);
 static DEVICE_ATTR(intensity, 0660, intensity_show, intensity_store);
 
 static ssize_t force_touch_intensity_store(struct device *dev,
-		struct device_attribute *devattr, const char *buf, size_t count)
+        struct device_attribute *devattr, const char *buf, size_t count)
 {
-	struct ss_vib *vib = dev_get_drvdata(dev);
-	int ret = 0, set_intensity = 0;
+    struct ss_vib *vib = dev_get_drvdata(dev);
+    int ret = 0, set_intensity = 0;
 
-	ret = kstrtoint(buf, 0, &set_intensity);
-	if (ret) {
-		pr_err("[VIB]: %s failed to get force touch intensity", __func__);
-		return ret;
-	}
+    ret = kstrtoint(buf, 0, &set_intensity);
+    if (ret) {
+        pr_err("[VIB]: %s failed to get force touch intensity", __func__);
+        return ret;
+    }
 
-	if ((set_intensity < 0) || (set_intensity > MAX_INTENSITY)) {
-		pr_err("[VIB]: %sout of rage\n", __func__);
-		return -EINVAL;
-	}
+    if ((set_intensity < 0) || (set_intensity > MAX_INTENSITY)) {
+        pr_err("[VIB]: %s out of range\n", __func__);
+        return -EINVAL;
+    }
 
-	vibe_set_intensity(set_intensity);
-	vib->force_touch_intensity = set_intensity;
+    set_intensity = apply_user_limit(set_intensity);
+    
+    vibe_set_intensity(set_intensity);
+    vib->force_touch_intensity = set_intensity;
 
-	return count;
+    pr_info("[VIB]: Force touch intensity set to %d (user limit: %d)\n", 
+            set_intensity, user_max_intensity);
+
+    return count;
 }
 
 static ssize_t force_touch_intensity_show(struct device *dev,
@@ -798,47 +827,51 @@ static ssize_t multi_freq_show(struct device *dev,
 static DEVICE_ATTR(multi_freq, 0660, multi_freq_show, multi_freq_store);
 
 static ssize_t haptic_engine_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
+        struct device_attribute *attr, const char *buf, size_t size)
 {
-     struct ss_vib *vib = dev_get_drvdata(dev);
-     int i = 0, _data = 0, skip = 0;
+    struct ss_vib *vib = dev_get_drvdata(dev);
+    int i = 0, _data = 0, skip = 0;
 
-     if (sscanf(buf, "%4u %n", &_data, &skip) != 1)
-             goto invalid_data;
+    if (sscanf(buf, "%4u %n", &_data, &skip) != 1)
+        goto invalid_data;
 
-     if (_data > PACKET_MAX_SIZE * 4)
-             goto invalid_data;
+    if (_data > PACKET_MAX_SIZE * 4)
+        goto invalid_data;
 
-     vib->f_packet_en = false;
-     vib->f_overdrive_en = false;
-     vib->packet_size = _data / 4;
-     vib->packet_cnt = 0;
+    vib->f_packet_en = false;
+    vib->f_overdrive_en = false;
+    vib->packet_size = _data / 4;
+    vib->packet_cnt = 0;
 
-     for (i = 0; i < vib->packet_size; i++) {
-             unsigned data[4] = { 0 };
-			 
-             buf += skip;
-			 
-             if (sscanf(buf, "%5u %5u %5u %5u %n", &data[0], &data[1],
-                                    &data[2], &data[3], &skip) != 4) {
-                     goto invalid_data;
-             }
+    for (i = 0; i < vib->packet_size; i++) {
+        unsigned data[4] = { 0 };
+        
+        buf += skip;
+        
+        if (sscanf(buf, "%5u %5u %5u %5u %n", &data[0], &data[1],
+                            &data[2], &data[3], &skip) != 4) {
+            goto invalid_data;
+        }
 
-             vib->haptic_eng[i].time      = data[0];
-             vib->haptic_eng[i].intensity = data[1];
-             vib->haptic_eng[i].freq      = data[2];
-             vib->haptic_eng[i].overdrive = data[3];
-     }
+        vib->haptic_eng[i].time      = data[0];
+        vib->haptic_eng[i].intensity = apply_user_limit(data[1]); // APLICAR LIMITE
+        vib->haptic_eng[i].freq      = data[2];
+        vib->haptic_eng[i].overdrive = data[3];
+        
+        if (data[1] != vib->haptic_eng[i].intensity) {
+            pr_info("[VIB]: Packet %d intensity limited from %u to %u\n", 
+                    i, data[1], vib->haptic_eng[i].intensity);
+        }
+    }
 
-     vib->f_packet_en = true;
-     vib->f_overdrive_en = true;
+    vib->f_packet_en = true;
+    vib->f_overdrive_en = true;
 
-     return size;
+    return size;
 
 invalid_data:
-     pr_err("%s, packet data error, Please check again\n", __func__);
-	 
-     return -EINVAL;
+    pr_err("%s, packet data error, Please check again\n", __func__);
+    return -EINVAL;
 }
 
 static ssize_t haptic_engine_show(struct device *dev, struct device_attribute *attr,
@@ -923,6 +956,36 @@ static ssize_t motor_type_show(struct device *dev, struct device_attribute *attr
 	return snprintf(buf, MAX_LEN_VIB_TYPE, "%s\n", vib->vib_type);
 }
 
+static ssize_t user_max_intensity_show(struct device *dev,
+        struct device_attribute *attr, char *buf)
+{
+    return sprintf(buf, "%u\n", (user_max_intensity / 100));
+}
+
+static ssize_t user_max_intensity_store(struct device *dev,
+        struct device_attribute *devattr, const char *buf, size_t count)
+{
+    int ret = 0, set_intensity = 0;
+
+    ret = kstrtoint(buf, 0, &set_intensity);
+    if (ret) {
+        pr_err("[VIB]: %s failed to get user max intensity", __func__);
+        return ret;
+    }
+
+    if ((set_intensity < 0) || (set_intensity > (MAX_INTENSITY / 100))) {
+        pr_err("[VIB]: %s out of range\n", __func__);
+        return -EINVAL;
+    }
+
+    user_max_intensity = set_intensity * 100;
+    pr_info("[VIB]: User max intensity set to %d\n", user_max_intensity);
+
+    return count;
+}
+
+static DEVICE_ATTR(user_max_intensity, 0644, user_max_intensity_show, user_max_intensity_store);
+
 static DEVICE_ATTR(motor_type, 0660, motor_type_show, NULL);
 
 #if defined(CONFIG_MOTOR_DRV_MAX77854) || defined(CONFIG_MOTOR_DRV_SM5720) || defined(CONFIG_MOTOR_DRV_MAX77705)
@@ -987,62 +1050,70 @@ static void regulator_power_onoff(int onoff)
 
 extern int haptic_homekey_press(void)
 {
-	/*for drv2624 panic prevention*/
-	if (g_vib == NULL) {
-		pr_info("[VIB] %s : NULL reference, return\n", __func__);
-		return -1;
-	}
+    int limited_intensity;
+    
+    if (g_vib == NULL) {
+        pr_info("[VIB] %s : NULL reference, return\n", __func__);
+        return -1;
+    }
 
-	mutex_lock(&g_vib->lock);
+    mutex_lock(&g_vib->lock);
 
-	max778xx_haptic_en(g_vib, true);
+    max778xx_haptic_en(g_vib, true);
 
-	g_vib->f_overdrive_en = true;
-	g_vib->timevalue = 7;
-	vibe_set_freq(g_vib, 2000);
-	vibe_set_intensity(g_vib->force_touch_intensity);
+    g_vib->f_overdrive_en = true;
+    g_vib->timevalue = 7;
+    vibe_set_freq(g_vib, 2000);
 
-	g_vib->state = 1;
+    limited_intensity = apply_user_limit(g_vib->force_touch_intensity);
+    vibe_set_intensity(limited_intensity);
 
-	pr_info("[VIB] %s : time: %dmsec, intensity: %d, freq: %d, strength : %d\n", __func__,
-		g_vib->timevalue, g_vib->force_touch_intensity, g_vib->freq, motor_strength);
-	g_vib->f_overdrive_en = false;
+    g_vib->state = 1;
 
-	mutex_unlock(&g_vib->lock);
+    pr_info("[VIB] %s : time: %dmsec, intensity: %d (limit: %d), freq: %d, strength : %d\n", 
+            __func__, g_vib->timevalue, limited_intensity, user_max_intensity, 
+            g_vib->freq, motor_strength);
+    
+    g_vib->f_overdrive_en = false;
 
-	queue_work(g_vib->queue, &g_vib->work);
+    mutex_unlock(&g_vib->lock);
+    queue_work(g_vib->queue, &g_vib->work);
 
-	return 0;
+    return 0;
 }
 
 extern int haptic_homekey_release(void)
 {
+    int limited_intensity;
+    
+    if (g_vib == NULL) {
+        pr_info("[VIB] %s : NULL reference, return\n", __func__);
+        return -1;
+    }
 
-	/*for drv2624 panic prevention*/
-	if (g_vib == NULL) {
-		pr_info("[VIB] %s : NULL reference, return\n", __func__);
-		return -1;
-	}
+    mutex_lock(&g_vib->lock);
 
-	mutex_lock(&g_vib->lock);
+    g_vib->f_overdrive_en = true;
+    g_vib->timevalue = 7;
+    vibe_set_freq(g_vib, 2000);
 
-	g_vib->f_overdrive_en = true;
-	g_vib->timevalue = 7;
-	vibe_set_freq(g_vib, 2000);
-	vibe_set_intensity(g_vib->force_touch_intensity);
+    limited_intensity = apply_user_limit(g_vib->force_touch_intensity);
+    vibe_set_intensity(limited_intensity);
 
-	g_vib->state = 1;
+    g_vib->state = 1;
 
-	pr_info("[VIB] %s : time: %dmsec, intensity: %d, freq: %d, strength : %d\n", __func__,
-		g_vib->timevalue, g_vib->force_touch_intensity, g_vib->freq, motor_strength);
-	g_vib->f_overdrive_en = false;
+    pr_info("[VIB] %s : time: %dmsec, intensity: %d (limit: %d), freq: %d, strength : %d\n", 
+            __func__, g_vib->timevalue, limited_intensity, user_max_intensity, 
+            g_vib->freq, motor_strength);
+    
+    g_vib->f_overdrive_en = false;
 
-	mutex_unlock(&g_vib->lock);
+    mutex_unlock(&g_vib->lock);
+    queue_work(g_vib->queue, &g_vib->work);
 
-	queue_work(g_vib->queue, &g_vib->work);
-
-	return 0;
+    return 0;
 }
+
 static int ss_vibrator_probe(struct platform_device *pdev)
 {
 	struct ss_vib *vib;
@@ -1073,9 +1144,10 @@ static int ss_vibrator_probe(struct platform_device *pdev)
 #else
 	vib->power_onoff = regulator_power_onoff;
 #endif
-	vib->intensity = DEFAULT_INTENSITY;
-	vib->force_touch_intensity = MAX_INTENSITY;
-
+    vib->intensity = DEFAULT_INTENSITY;
+    vib->force_touch_intensity = DEFAULT_INTENSITY;
+	
+    user_max_intensity = DEFAULT_INTENSITY;
 	if (f_multi_freq) {
 		g_nlra_gp_clk_m = vib->tuning[freq_alert].m;
 		g_nlra_gp_clk_n = vib->tuning[freq_alert].n;
@@ -1156,6 +1228,10 @@ static int ss_vibrator_probe(struct platform_device *pdev)
 	rc = sysfs_create_file(&vib_dev->kobj, &dev_attr_vib_tuning.attr);
 	if (rc)
 		pr_info("Failed to create sysfs group for samsung specific led\n");
+
+	rc = sysfs_create_file(&vib->to_dev->kobj, &dev_attr_user_max_intensity.attr);
+	if (rc < 0)
+		pr_err("[VIB]: Failed to register sysfs user_max_intensity: %d\n", rc);
 
 	rc = sysfs_create_file(&vib->to_dev->kobj, &dev_attr_pwm_default.attr);
 	rc = sysfs_create_file(&vib->to_dev->kobj, &dev_attr_pwm_min.attr);
