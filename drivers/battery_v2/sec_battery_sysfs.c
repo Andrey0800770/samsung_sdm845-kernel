@@ -970,34 +970,48 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 	case CISD_DATA:
 		{
 			struct cisd *pcisd = &battery->cisd;
-			char temp_buf[1024] = {0,};
+			char *temp_buf;
 			int j = 0;
 
+			if (!temp_buf) {
+				i = -ENOMEM;
+				break;
+			}
 			sprintf(temp_buf+strlen(temp_buf), "%d", pcisd->data[CISD_DATA_RESET_ALG]);
 			for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX_PER_DAY; j++)
 				sprintf(temp_buf+strlen(temp_buf), " %d", pcisd->data[j]);
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
+			kfree(temp_buf);
 		}
 		break;
 	case CISD_DATA_JSON:
 		{
 			struct cisd *pcisd = &battery->cisd;
-			char temp_buf[1920] = {0,};
+			char *temp_buf;
 			int j = 0;
-
+			
+			if (!temp_buf) {
+				i = -ENOMEM;
+				break;
+			}
 			sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
 					cisd_data_str[CISD_DATA_RESET_ALG], pcisd->data[CISD_DATA_RESET_ALG]);
 			for (j = CISD_DATA_RESET_ALG + 1; j < CISD_DATA_MAX; j++)
 				sprintf(temp_buf+strlen(temp_buf), ",\"%s\":\"%d\"", cisd_data_str[j], pcisd->data[j]);
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
+			kfree(temp_buf);
 		}
 		break;
 	case CISD_DATA_D_JSON:
 		{
 			struct cisd *pcisd = &battery->cisd;
-			char temp_buf[1920] = {0,};
+			char *temp_buf;
 			int j = 0;
-
+			
+			if (!temp_buf) {
+				i = -ENOMEM;
+				break;
+			}
 			sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
 				cisd_data_str_d[CISD_DATA_FULL_COUNT_PER_DAY-CISD_DATA_MAX],
 				pcisd->data[CISD_DATA_FULL_COUNT_PER_DAY]);
@@ -1031,6 +1045,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 
 			pcisd->data[CISD_DATA_CAP_MIN_PER_DAY] = 0xFFFF;
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
+			kfree(temp_buf);
 		}
 		break;
 	case CISD_WIRE_COUNT:
@@ -1044,24 +1059,33 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		{
 			struct cisd *pcisd = &battery->cisd;
 			struct pad_data *pad_data = pcisd->pad_array;
-			char temp_buf[1024] = {0,};
+			char *temp_buf;
 			int j = 0;
 
+			if (!temp_buf) {
+				i = -ENOMEM;
+				break;
+			}
 			sprintf(temp_buf+strlen(temp_buf), "%d %d",
 				PAD_INDEX_VALUE, pcisd->pad_count);
 			while ((pad_data != NULL) && ((pad_data = pad_data->next) != NULL) &&
 					(pad_data->id < MAX_PAD_ID) && (j++ < pcisd->pad_count))
 				sprintf(temp_buf+strlen(temp_buf), " 0x%02x:%d", pad_data->id, pad_data->count);
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
+			kfree(temp_buf);
 		}
 		break;
 	case CISD_WC_DATA_JSON:
 		{
 			struct cisd *pcisd = &battery->cisd;
 			struct pad_data *pad_data = pcisd->pad_array;
-			char temp_buf[1024] = {0,};
+			char *temp_buf;;
 			int j = 0;
 
+			if (!temp_buf) {
+				i = -ENOMEM;
+				break;
+			}
 			sprintf(temp_buf+strlen(temp_buf), "\"%s\":\"%d\"",
 					PAD_INDEX_STRING, PAD_INDEX_VALUE);
 			while ((pad_data != NULL) && ((pad_data = pad_data->next) != NULL) &&
@@ -1069,6 +1093,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 				sprintf(temp_buf+strlen(temp_buf), ",\"%s%02x\":\"%d\"",
 					PAD_JSON_STRING, pad_data->id, pad_data->count);
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
+			kfree(temp_buf);
 		}
 		break;
 	case PREV_BATTERY_DATA:
