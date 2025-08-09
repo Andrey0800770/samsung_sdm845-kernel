@@ -1666,7 +1666,7 @@ start_testing:
 	if (no_builtin_file)
 		goto no_builtin;
 
-	if (test_item && CM_ENABLED)
+	if (test_item & CM_ENABLED)
 		validate_cm_test_results(dev, configuration, cmcp_info,
 			result, &final_pass, test_item);
 
