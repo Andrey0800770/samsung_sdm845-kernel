@@ -28,6 +28,7 @@
 #include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
+#include <linux/slab.h>
 
 #include <asm/unaligned.h>
 
@@ -614,9 +615,18 @@ static inline void __ss_logger_level_text_event_log(char *buffer, size_t count)
 {
 #ifdef CONFIG_SEC_EVENT_LOG
 	int buf_len;
-	char buf[MAX_BUFFER_SIZE] = { '\0', };
+	char *buf;
 	unsigned int tag_id = *(unsigned int *)buffer;
 	const char *tag_name;
+
+	/* Allocate buffer dynamically to avoid stack overflow */
+	buf = kmalloc(MAX_BUFFER_SIZE, GFP_ATOMIC);
+	if (!buf) {
+		pr_warn("Failed to allocate buffer for event log\n");
+		return;
+	}
+	
+	memset(buf, 0, MAX_BUFFER_SIZE);
 
 	tag_name = find_tag_name_from_id(tag_id);
 	if (count == 4 && tag_name) {
@@ -655,6 +665,7 @@ static inline void __ss_logger_level_text_event_log(char *buffer, size_t count)
 
 		logger.msg[0] = 0xff; /* dummy value; */
 	}
+	kfree(buf);
 #endif /* CONFIG_SEC_EVENT_LOG */
 }
 
