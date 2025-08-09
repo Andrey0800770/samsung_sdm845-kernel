@@ -40,6 +40,7 @@
 #include <crypto/md5.h>
 #include <crypto/algapi.h>
 #include <crypto/ice.h>
+#include <linux/blkdev.h>
 
 #ifdef CONFIG_CRYPTO_FDE_KEY_UPDATE
 #include <soc/qcom/scm.h>
@@ -56,7 +57,6 @@
 #define KEY_SIZE_XTS 32
 #define AES_XTS_IV_LEN 16
 #define MAX_MSM_ICE_KEY_LUT_SIZE 32
-#define SECTOR_SIZE 512
 #define MIN_CRYPTO_TRANSFER_SIZE (4 * 1024)
 
 #define DM_REQ_CRYPT_ERROR -1
