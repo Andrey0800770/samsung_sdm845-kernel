@@ -89,7 +89,7 @@ static int dev_ril_bridge_probe(struct platform_device *pdev)
 	}
 
 	dev_ril_bridge_device = device_create_with_groups(dev_ril_bridge_class,
-			NULL, 0, MKDEV(0, 0), dev_ril_bridge_groups, "%s",
+			NULL, (dev_t)0, NULL, dev_ril_bridge_groups, "%s",
 			"dev_ril_bridge");
 	if (IS_ERR(dev_ril_bridge_device)) {
 		drb_err("couldn't register system device\n");
