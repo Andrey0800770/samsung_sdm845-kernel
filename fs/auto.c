@@ -1,0 +1,137 @@
+#include <linux/module.h>
+#include <linux/fs.h>
+#include <linux/buffer_head.h>
+#include <linux/blkdev.h>
+#include <linux/mount.h>
+
+#define EROFS_MAGIC     0xE0F5E1E2
+#define EXT4_SUPER_MAGIC 0xEF53
+#define EROFS_OFFSET    1024
+#define EXT4_SB_OFFSET  1024
+
+static int detect_filesystem_type(const char *dev_name, char *fs_name, size_t len)
+{
+    struct block_device *bdev;
+    struct buffer_head *bh = NULL;
+    fmode_t mode = FMODE_READ;
+    __le32 magic;
+    int result = -1;
+    bdev = blkdev_get_by_path(dev_name, mode, NULL);
+    if (IS_ERR(bdev)) {
+        printk(KERN_DEBUG "AUTO-FS: Cannot open %s for detection\n", dev_name);
+        return -1;
+    }
+    bh = __bread(bdev, EROFS_OFFSET / 4096, 4096);
+    if (bh) {
+        magic = le32_to_cpu(*((__le32 *)(bh->b_data + (EROFS_OFFSET % 4096))));
+        if (magic == EROFS_MAGIC) {
+            strncpy(fs_name, "erofs", len - 1);
+            fs_name[len - 1] = '\0';
+            result = 0;
+            printk(KERN_INFO "AUTO-FS: Detected EROFS on %s (magic=0x%08x)\n", 
+                   dev_name, magic);
+            brelse(bh);
+            goto cleanup;
+        }
+        brelse(bh);
+    }
+
+    bh = __bread(bdev, EXT4_SB_OFFSET / 4096, 4096);
+    if (bh) {
+        magic = le32_to_cpu(*((__le32 *)(bh->b_data + (EXT4_SB_OFFSET % 4096) + 56)));
+        if (magic == EXT4_SUPER_MAGIC) {
+            strncpy(fs_name, "ext4", len - 1);
+            fs_name[len - 1] = '\0';
+            result = 0;
+            printk(KERN_INFO "AUTO-FS: Detected EXT4 on %s (magic=0x%08x)\n", 
+                   dev_name, magic);
+        } else {
+            strncpy(fs_name, "ext4", len - 1);
+            fs_name[len - 1] = '\0';
+            result = 0;
+            printk(KERN_INFO "AUTO-FS: Unknown magic 0x%08x, defaulting to EXT4 for %s\n", 
+                   magic, dev_name);
+        }
+        brelse(bh);
+    } else {
+        strncpy(fs_name, "ext4", len - 1);
+        fs_name[len - 1] = '\0';
+        result = 0;
+        printk(KERN_INFO "AUTO-FS: Cannot read superblock, defaulting to EXT4 for %s\n", 
+               dev_name);
+    }
+
+cleanup:
+    blkdev_put(bdev, mode);
+    return result;
+}
+
+static struct dentry *auto_mount(struct file_system_type *fs_type, int flags,
+                                const char *dev_name, void *data)
+{
+    char detected_fs[16];
+    struct file_system_type *target_fs;
+    struct dentry *result;
+
+    if (detect_filesystem_type(dev_name, detected_fs, sizeof(detected_fs)) != 0) {
+        printk(KERN_ERR "AUTO-FS: Failed to detect filesystem type on %s\n", dev_name);
+        return ERR_PTR(-EINVAL);
+    }
+
+    target_fs = get_fs_type(detected_fs);
+    if (!target_fs) {
+        printk(KERN_ERR "AUTO-FS: Filesystem driver '%s' not available for %s\n", 
+               detected_fs, dev_name);
+        return ERR_PTR(-ENODEV);
+    }
+
+    printk(KERN_INFO "AUTO-FS: Mounting %s as %s\n", dev_name, detected_fs);
+    result = target_fs->mount(target_fs, flags, dev_name, data);
+    put_filesystem(target_fs);
+
+    if (!IS_ERR(result)) {
+        printk(KERN_INFO "AUTO-FS: Successfully mounted %s as %s\n", 
+               dev_name, detected_fs);
+    } else {
+        printk(KERN_ERR "AUTO-FS: Failed to mount %s as %s: %ld\n", 
+               dev_name, detected_fs, PTR_ERR(result));
+    }
+    return result;
+}
+
+static struct file_system_type auto_fs_type = {
+    .owner      = THIS_MODULE,
+    .name       = "auto",
+    .mount      = auto_mount,
+    .kill_sb    = kill_block_super,
+    .fs_flags   = FS_REQUIRES_DEV,
+};
+
+static int __init auto_fs_init(void)
+{
+    int ret;
+
+    ret = register_filesystem(&auto_fs_type);
+    if (ret) {
+        printk(KERN_ERR "AUTO-FS: Failed to register auto filesystem: %d\n", ret);
+        return ret;
+    }
+
+    printk(KERN_INFO "AUTO-FS: Auto-detection filesystem registered successfully\n");
+    printk(KERN_INFO "AUTO-FS: Usage: mount -t auto /dev/device /mountpoint\n");
+    return 0;
+}
+
+static void __exit auto_fs_exit(void)
+{
+    unregister_filesystem(&auto_fs_type);
+    printk(KERN_INFO "AUTO-FS: Auto-detection filesystem unregistered\n");
+}
+
+module_init(auto_fs_init);
+module_exit(auto_fs_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Auto-detecting filesystem for EROFS/EXT4");
+MODULE_AUTHOR("Andrey");
+MODULE_VERSION("1.0");
