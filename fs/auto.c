@@ -14,22 +14,25 @@ static int detect_filesystem_type(const char *dev_name, char *fs_name, size_t le
     struct block_device *bdev;
     struct buffer_head *bh = NULL;
     fmode_t mode = FMODE_READ;
-    __le32 magic;
+    __le32 erofs_magic;
+    __le16 ext4_magic;
     int result = -1;
+
     bdev = blkdev_get_by_path(dev_name, mode, NULL);
     if (IS_ERR(bdev)) {
         printk(KERN_DEBUG "AUTO-FS: Cannot open %s for detection\n", dev_name);
         return -1;
     }
+
     bh = __bread(bdev, EROFS_OFFSET / 4096, 4096);
     if (bh) {
-        magic = le32_to_cpu(*((__le32 *)(bh->b_data + (EROFS_OFFSET % 4096))));
-        if (magic == EROFS_MAGIC) {
+        erofs_magic = le32_to_cpu(*((__le32 *)(bh->b_data + (EROFS_OFFSET % 4096))));
+        if (erofs_magic == EROFS_MAGIC) {
             strncpy(fs_name, "erofs", len - 1);
             fs_name[len - 1] = '\0';
             result = 0;
             printk(KERN_INFO "AUTO-FS: Detected EROFS on %s (magic=0x%08x)\n", 
-                   dev_name, magic);
+                   dev_name, erofs_magic);
             brelse(bh);
             goto cleanup;
         }
@@ -38,19 +41,19 @@ static int detect_filesystem_type(const char *dev_name, char *fs_name, size_t le
 
     bh = __bread(bdev, EXT4_SB_OFFSET / 4096, 4096);
     if (bh) {
-        magic = le32_to_cpu(*((__le32 *)(bh->b_data + (EXT4_SB_OFFSET % 4096) + 56)));
-        if (magic == EXT4_SUPER_MAGIC) {
+        ext4_magic = le16_to_cpu(*((__le16 *)(bh->b_data + (EXT4_SB_OFFSET % 4096) + 56)));
+        if (ext4_magic == EXT4_SUPER_MAGIC) {
             strncpy(fs_name, "ext4", len - 1);
             fs_name[len - 1] = '\0';
             result = 0;
-            printk(KERN_INFO "AUTO-FS: Detected EXT4 on %s (magic=0x%08x)\n", 
-                   dev_name, magic);
+            printk(KERN_INFO "AUTO-FS: Detected EXT4 on %s (magic=0x%04x)\n", 
+                   dev_name, ext4_magic);
         } else {
             strncpy(fs_name, "ext4", len - 1);
             fs_name[len - 1] = '\0';
             result = 0;
-            printk(KERN_INFO "AUTO-FS: Unknown magic 0x%08x, defaulting to EXT4 for %s\n", 
-                   magic, dev_name);
+            printk(KERN_INFO "AUTO-FS: Unknown magic 0x%04x, defaulting to EXT4 for %s\n", 
+                   ext4_magic, dev_name);
         }
         brelse(bh);
     } else {
@@ -118,7 +121,6 @@ static int __init auto_fs_init(void)
     }
 
     printk(KERN_INFO "AUTO-FS: Auto-detection filesystem registered successfully\n");
-    printk(KERN_INFO "AUTO-FS: Usage: mount -t auto /dev/device /mountpoint\n");
     return 0;
 }
 
@@ -134,4 +136,4 @@ module_exit(auto_fs_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Auto-detecting filesystem for EROFS/EXT4");
 MODULE_AUTHOR("Andrey");
-MODULE_VERSION("1.0");
+MODULE_VERSION("1.1");
