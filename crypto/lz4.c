@@ -52,7 +52,8 @@ static int lz4_compress_crypto(struct crypto_tfm *tfm, const u8 *src,
 	size_t tmp_len = *dlen;
 	int err;
 
-	err = lz4_compress(src, slen, dst, &tmp_len, ctx->lz4_comp_mem);
+	tmp_len = LZ4_compress_default(src, dst, slen, *dlen, ctx->lz4_comp_mem);
+	err = (tmp_len > 0) ? 0 : -EINVAL;
 
 	if (err < 0)
 		return -EINVAL;
@@ -68,7 +69,8 @@ static int lz4_decompress_crypto(struct crypto_tfm *tfm, const u8 *src,
 	size_t tmp_len = *dlen;
 	size_t __slen = slen;
 
-	err = lz4_decompress_unknownoutputsize(src, __slen, dst, &tmp_len);
+	tmp_len = LZ4_decompress_safe(src, dst, __slen, *dlen);
+	err = (tmp_len >= 0) ? 0 : -EINVAL;
 	if (err < 0)
 		return -EINVAL;
 

@@ -72,7 +72,7 @@ STATIC inline int INIT unlz4(u8 *input, long in_len,
 		error("NULL input pointer and missing fill function");
 		goto exit_1;
 	} else {
-		inp = large_malloc(lz4_compressbound(uncomp_chunksize));
+		inp = large_malloc(LZ4_compressBound(uncomp_chunksize));
 		if (!inp) {
 			error("Could not allocate input buffer");
 			goto exit_1;
@@ -143,7 +143,7 @@ STATIC inline int INIT unlz4(u8 *input, long in_len,
 			inp += 4;
 			size -= 4;
 		} else {
-			if (chunksize > lz4_compressbound(uncomp_chunksize)) {
+			if (chunksize > LZ4_compressBound(uncomp_chunksize)) {
 				error("chunk length is longer than allocated");
 				goto exit_2;
 			}
@@ -162,8 +162,7 @@ STATIC inline int INIT unlz4(u8 *input, long in_len,
 		ret = lz4_decompress(inp, &chunksize, outp, dest_len);
 #else
 		dest_len = uncomp_chunksize;
-		ret = lz4_decompress_unknownoutputsize(inp, chunksize, outp,
-				&dest_len);
+		ret = LZ4_decompress_safe(inp, outp, chunksize, dest_len);
 #endif
 		if (ret < 0) {
 			error("Decoding failed");

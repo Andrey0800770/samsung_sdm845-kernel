@@ -235,9 +235,6 @@ config LZO_DECOMPRESS
 config LZ4_COMPRESS
 	tristate
 
-config LZ4HC_COMPRESS
-	tristate
-
 config LZ4KD_COMPRESS
 	tristate
 
