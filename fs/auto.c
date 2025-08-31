@@ -3,6 +3,8 @@
 #include <linux/buffer_head.h>
 #include <linux/blkdev.h>
 #include <linux/mount.h>
+#include <linux/string.h>
+#include <linux/slab.h>
 
 #define EROFS_MAGIC     0xE0F5E1E2
 #define EXT4_SUPER_MAGIC 0xEF53
@@ -69,27 +71,69 @@ cleanup:
     return result;
 }
 
+static char *filter_erofs_options(const char *data)
+{
+    char *result, *pos;
+    
+    if (!data) return NULL;
+    
+    result = kstrdup(data, GFP_KERNEL);
+    if (!result) return NULL;
+    
+    pos = strstr(result, "barrier=1");
+    if (pos) {
+        if (pos > result && *(pos-1) == ',') {
+            memmove(pos-1, pos+9, strlen(pos+9)+1);
+        } else if (*(pos+9) == ',') {
+            memmove(pos, pos+10, strlen(pos+10)+1);
+        } else {
+            *pos = '\0';
+        }
+    }
+    
+    pos = strstr(result, "discard");
+    if (pos) {
+        if (pos > result && *(pos-1) == ',') {
+            memmove(pos-1, pos+7, strlen(pos+7)+1);
+        } else if (*(pos+7) == ',') {
+            memmove(pos, pos+8, strlen(pos+8)+1);
+        } else {
+            *pos = '\0';
+        }
+    }
+    return result;
+}
+
 static struct dentry *auto_mount(struct file_system_type *fs_type, int flags,
                                 const char *dev_name, void *data)
 {
     char detected_fs[16];
     struct file_system_type *target_fs;
     struct dentry *result;
+    char *filtered_data = NULL;
+    void *mount_data = data;
 
     if (detect_filesystem_type(dev_name, detected_fs, sizeof(detected_fs)) != 0) {
         printk(KERN_ERR "AUTO-FS: Failed to detect filesystem type on %s\n", dev_name);
         return ERR_PTR(-EINVAL);
     }
 
+    /* Filter barrier=1 for EROFS */
+    if (strcmp(detected_fs, "erofs") == 0 && data != NULL) {
+        filtered_data = filter_erofs_options((char *)data);
+        if (filtered_data) mount_data = filtered_data;
+    }
+
     target_fs = get_fs_type(detected_fs);
     if (!target_fs) {
         printk(KERN_ERR "AUTO-FS: Filesystem driver '%s' not available for %s\n", 
                detected_fs, dev_name);
+        if (filtered_data) kfree(filtered_data);
         return ERR_PTR(-ENODEV);
     }
 
     printk(KERN_INFO "AUTO-FS: Mounting %s as %s\n", dev_name, detected_fs);
-    result = target_fs->mount(target_fs, flags, dev_name, data);
+    result = target_fs->mount(target_fs, flags, dev_name, mount_data);
     put_filesystem(target_fs);
 
     if (!IS_ERR(result)) {
@@ -99,6 +143,10 @@ static struct dentry *auto_mount(struct file_system_type *fs_type, int flags,
         printk(KERN_ERR "AUTO-FS: Failed to mount %s as %s: %ld\n", 
                dev_name, detected_fs, PTR_ERR(result));
     }
+
+    /* Clean up */
+    if (filtered_data) kfree(filtered_data);
+
     return result;
 }
 
@@ -136,4 +184,4 @@ module_exit(auto_fs_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Auto-detecting filesystem for EROFS/EXT4");
 MODULE_AUTHOR("Andrey");
-MODULE_VERSION("1.1");
+MODULE_VERSION("1.2");
