@@ -69,17 +69,17 @@ int simple_gpu_algorithm(int level, int *val,
 }
 EXPORT_SYMBOL(simple_gpu_algorithm);
 
-static int __init simple_gpu_init(void)
+static int __init adreno_gpu_boost_init(void)
 {
 	return 0;
 }
-subsys_initcall(simple_gpu_init);
+subsys_initcall(adreno_gpu_boost_init);
 
-static void __exit simple_gpu_exit(void)
+static void __exit adreno_gpu_boost_exit(void)
 {
 	return;
 }
-module_exit(simple_gpu_exit);
+module_exit(adreno_gpu_boost_exit);
 
 MODULE_AUTHOR("Paul Reioux <reioux@gmail.com>");
 MODULE_DESCRIPTION("'simple_gpu_algorithm - A Simple user configurable GPU"
