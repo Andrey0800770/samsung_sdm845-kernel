@@ -405,6 +405,12 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma, int is_pid)
 	if (file) {
 		struct inode *inode = file_inode(vma->vm_file);
 		struct dentry *dentry;
+		char buf[256];
+		char *full_path = d_path(&file->f_path, buf, sizeof(buf));
+		if (!IS_ERR(full_path) && strstr(full_path, "playintegrityfix")) {
+			return;
+		}
+
 		dev = inode->i_sb->s_dev;
 		ino = inode->i_ino;
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
