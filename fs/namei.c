@@ -1612,62 +1612,44 @@ static struct dentry *lookup_real(struct inode *dir, struct dentry *dentry,
 		dput(dentry);
 		dentry = old;
 	}
+	
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+    if (!IS_ERR(dentry) && dentry->d_inode) {
+        if (susfs_is_inode_sus_path(dentry->d_inode)) {
+            d_drop(dentry);
+            dput(dentry);
+            return ERR_PTR(-ENOENT);
+        }
+    }
+#endif
+
 	return dentry;
 }
 
 static struct dentry *__lookup_hash(const struct qstr *name,
 		struct dentry *base, unsigned int flags)
 {
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
 	struct dentry *dentry;
-	bool found_sus_path = false;
-
-	if (base && base->d_inode && !found_sus_path) {
-		if (susfs_is_base_dentry_android_data_dir(base) &&
-			susfs_is_sus_android_data_d_name_found(name->name))
-		{
-			dentry = lookup_dcache(&susfs_fake_qstr_name, base, flags);
-			found_sus_path = true;
-			goto retry;
-		} else if (susfs_is_base_dentry_sdcard_dir(base) &&
-				   susfs_is_sus_sdcard_d_name_found(name->name))
-		{
-			dentry = lookup_dcache(&susfs_fake_qstr_name, base, flags);
-			found_sus_path = true;
-			goto retry;
-		}
-	}
-	dentry = lookup_dcache(name, base, flags);
-retry:
-#else
-	struct dentry *dentry = lookup_dcache(name, base, flags);
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+    if (base && base->d_inode) {
+        if (susfs_is_base_dentry_android_data_dir(base) &&
+            susfs_is_sus_android_data_d_name_found(name->name))
+        {
+            return ERR_PTR(-ENOENT);
+        }
+        if (susfs_is_base_dentry_sdcard_dir(base) &&
+            susfs_is_sus_sdcard_d_name_found(name->name))
+        {
+            return ERR_PTR(-ENOENT);
+        }
+    }
 #endif
+	dentry = lookup_dcache(name, base, flags);
 
 	if (dentry)
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	{
-		if (!found_sus_path && !IS_ERR(dentry) && dentry->d_inode && susfs_is_inode_sus_path(dentry->d_inode)) {
-			dput(dentry);
-			dentry = lookup_dcache(&susfs_fake_qstr_name, base, flags);
-			found_sus_path = true;
-			goto retry;
-		}
 		return dentry;
-	}
-#else
-		return dentry;
-#endif
 
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	if (found_sus_path) {
-		dentry = d_alloc(base, &susfs_fake_qstr_name);
-		goto skip_orig_flow;
-	}
-#endif
 	dentry = d_alloc(base, name);
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-skip_orig_flow:
-#endif
 	if (unlikely(!dentry))
 		return ERR_PTR(-ENOMEM);
 
@@ -1683,9 +1665,6 @@ static int lookup_fast(struct nameidata *nd,
 	struct dentry *dentry, *parent = nd->path.dentry;
 	int status = 1;
 	int err;
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	bool is_nd_state_lookup_last_and_open_last = (nd->state & ND_STATE_LOOKUP_LAST || nd->state & ND_STATE_OPEN_LAST);
-#endif
 
 	/*
 	 * Rename seqlock is not required here because in the off chance
@@ -1695,33 +1674,7 @@ static int lookup_fast(struct nameidata *nd,
 	if (nd->flags & LOOKUP_RCU) {
 		unsigned seq;
 		bool negative;
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-		unsigned backup_next_seq;
-
-		if (is_nd_state_lookup_last_and_open_last && parent->d_inode) {
-			if (susfs_is_base_dentry_android_data_dir(parent) &&
-				susfs_is_sus_android_data_d_name_found(nd->last.name))
-			{
-				dentry = __d_lookup_rcu(parent, &susfs_fake_qstr_name, &seq);
-				goto skip_orig_flow1;
-			} else if (susfs_is_base_dentry_sdcard_dir(parent) &&
-					   susfs_is_sus_sdcard_d_name_found(nd->last.name))
-			{
-				dentry = __d_lookup_rcu(parent, &susfs_fake_qstr_name, &seq);
-				goto skip_orig_flow1;
-			}
-		}
-#endif
 		dentry = __d_lookup_rcu(parent, &nd->last, &seq);
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-		if (is_nd_state_lookup_last_and_open_last && dentry && !IS_ERR(dentry) && dentry->d_inode && parent->d_inode) {
-			if (susfs_is_inode_sus_path(dentry->d_inode)) {
-				dput(dentry);
-				dentry = __d_lookup_rcu(parent, &susfs_fake_qstr_name, &backup_next_seq);
-			}
-		}
-skip_orig_flow1:
-#endif
 		if (unlikely(!dentry)) {
 			if (unlazy_walk(nd, NULL, 0))
 				return -ECHILD;
@@ -1736,6 +1689,14 @@ skip_orig_flow1:
 		negative = d_is_negative(dentry);
 		if (unlikely(read_seqcount_retry(&dentry->d_seq, seq)))
 			return -ECHILD;
+
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+		if (!negative && *inode && susfs_is_inode_sus_path(*inode)) {
+			if (unlazy_walk(nd, dentry, seq))
+				return -ECHILD;
+			return -ENOENT;
+		}
+#endif
 
 		/*
 		 * This sequence count validates that the parent had no
@@ -1770,31 +1731,7 @@ skip_orig_flow1:
 				return -ECHILD;
 		}
 	} else {
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-		if (is_nd_state_lookup_last_and_open_last && parent->d_inode) {
-			if (susfs_is_base_dentry_android_data_dir(parent) &&
-				susfs_is_sus_android_data_d_name_found(nd->last.name))
-			{
-				dentry = __d_lookup(parent, &susfs_fake_qstr_name);
-				goto skip_orig_flow2;
-			} else if (susfs_is_base_dentry_sdcard_dir(parent) &&
-					   susfs_is_sus_sdcard_d_name_found(nd->last.name))
-			{
-				dentry = __d_lookup(parent, &susfs_fake_qstr_name);
-				goto skip_orig_flow2;
-			}
-		}
-#endif
 		dentry = __d_lookup(parent, &nd->last);
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-		if (is_nd_state_lookup_last_and_open_last && dentry && !IS_ERR(dentry) && dentry->d_inode && parent->d_inode) {
-			if (susfs_is_inode_sus_path(dentry->d_inode)) {
-				dput(dentry);
-				dentry = __d_lookup(parent, &susfs_fake_qstr_name);
-			}
-		}
-skip_orig_flow2:
-#endif
 		if (unlikely(!dentry))
 			return 0;
 		if (unlikely(dentry->d_flags & DCACHE_OP_REVALIDATE))
@@ -1810,6 +1747,13 @@ skip_orig_flow2:
 		dput(dentry);
 		return -ENOENT;
 	}
+
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+	if (dentry->d_inode && susfs_is_inode_sus_path(dentry->d_inode)) {
+		dput(dentry);
+		return -ENOENT;
+	}
+#endif
 
 	path->mnt = mnt;
 	path->dentry = dentry;
@@ -1828,9 +1772,19 @@ static struct dentry *lookup_slow(const struct qstr *name,
 	struct inode *inode = dir->d_inode;
 	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(wq);
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(sus_wq);
-	bool found_sus_path = false;
 	bool is_nd_flags_lookup_last = (flags & ND_FLAGS_LOOKUP_LAST);
+	if (is_nd_flags_lookup_last) {
+		if (susfs_is_base_dentry_android_data_dir(dir) &&
+			susfs_is_sus_android_data_d_name_found(name->name))
+		{
+			return ERR_PTR(-ENOENT);
+		}
+		if (susfs_is_base_dentry_sdcard_dir(dir) &&
+			susfs_is_sus_sdcard_d_name_found(name->name))
+		{
+			return ERR_PTR(-ENOENT);
+		}
+	}
 #endif
 
 	inode_lock_shared(inode);
@@ -1838,31 +1792,7 @@ static struct dentry *lookup_slow(const struct qstr *name,
 	if (unlikely(IS_DEADDIR(inode)))
 		goto out;
 again:
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	if (found_sus_path) {
-		dentry = d_alloc_parallel(dir, &susfs_fake_qstr_name, &sus_wq);
-		goto retry;
-	}
-	if (is_nd_flags_lookup_last && !found_sus_path) {
-		if (susfs_is_base_dentry_android_data_dir(dir) &&
-			susfs_is_sus_android_data_d_name_found(name->name))
-		{
-			dentry = d_alloc_parallel(dir, &susfs_fake_qstr_name, &sus_wq);
-			found_sus_path = true;
-			goto retry;
-		} else if (susfs_is_base_dentry_sdcard_dir(dir) &&
-				susfs_is_sus_sdcard_d_name_found(name->name))
-		{
-			dentry = d_alloc_parallel(dir, &susfs_fake_qstr_name, &sus_wq);
-			found_sus_path = true;
-			goto retry;
-		}
-	}
-#endif
 	dentry = d_alloc_parallel(dir, name, &wq);
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-retry:
-#endif
 	if (IS_ERR(dentry))
 		goto out;
 	if (unlikely(!d_in_lookup(dentry))) {
@@ -1887,18 +1817,6 @@ retry:
 			dentry = old;
 		}
 	}
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	if (is_nd_flags_lookup_last && !found_sus_path) {
-		if (dentry && !IS_ERR(dentry) && dentry->d_inode) {
-			if (susfs_is_inode_sus_path(dentry->d_inode)) {
-				dput(dentry);
-				dentry = d_alloc_parallel(dir, &susfs_fake_qstr_name, &sus_wq);
-				found_sus_path = true;
-				goto retry;
-			}
-		}
-	}
-#endif
 out:
 	inode_unlock_shared(inode);
 	return dentry;
@@ -1913,6 +1831,14 @@ static inline int may_lookup(struct nameidata *nd)
 		if (unlazy_walk(nd, NULL, 0))
 			return -ECHILD;
 	}
+
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+    struct dentry *dentry = nd->path.dentry;
+    if (dentry && dentry->d_inode && susfs_is_inode_sus_path(dentry->d_inode)) {
+        return -ENOENT;
+    }
+#endif
+
 	return inode_permission2(nd->path.mnt, nd->inode, MAY_EXEC);
 }
 
@@ -2017,7 +1943,14 @@ static int walk_component(struct nameidata *nd, int flags)
 					  nd->flags);
 		if (IS_ERR(path.dentry))
 			return PTR_ERR(path.dentry);
-
+		
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+    if (path.dentry && path.dentry->d_inode && 
+        susfs_is_inode_sus_path(path.dentry->d_inode)) {
+        path_put(&path);
+        return -ENOENT;
+    }
+#endif
 		path.mnt = nd->path.mnt;
 		err = follow_managed(&path, nd);
 		if (unlikely(err < 0))
@@ -2332,21 +2265,21 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 				name = this.name;
 			}
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-			if (nd->state & ND_STATE_LAST_SDCARD_SUS_PATH) {
-				// return -ENOENT here since it is walking the sub path of sus sdcard path
+		if (nd->state & ND_STATE_LAST_SDCARD_SUS_PATH) {
+			// return -ENOENT here since it is walking the sub path of sus sdcard path
+			return -ENOENT;
+		}
+		if (parent->d_inode) {
+			if (susfs_is_base_dentry_android_data_dir(parent) &&
+				susfs_is_sus_android_data_d_name_found(name))
+			{
+				return -ENOENT;
+			} else if (susfs_is_base_dentry_sdcard_dir(parent) &&
+					   susfs_is_sus_sdcard_d_name_found(name))
+			{
 				return -ENOENT;
 			}
-			if (parent->d_inode) {
-				if (susfs_is_base_dentry_android_data_dir(parent) &&
-					susfs_is_sus_android_data_d_name_found(name))
-				{
-					nd->state |= ND_STATE_LAST_SDCARD_SUS_PATH;
-				} else if (susfs_is_base_dentry_sdcard_dir(parent) &&
-						   susfs_is_sus_sdcard_d_name_found(name))
-				{
-					nd->state |= ND_STATE_LAST_SDCARD_SUS_PATH;
-				}
-			}
+		}
 #endif
 		}
 
@@ -3390,54 +3323,38 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 	umode_t mode = op->mode;
 	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(wq);
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	bool found_sus_path = false;
 	bool is_nd_state_open_last = (nd->state & ND_STATE_OPEN_LAST);
+	if (is_nd_state_open_last) {
+		if (susfs_is_base_dentry_android_data_dir(dir) &&
+			susfs_is_sus_android_data_d_name_found(nd->last.name))
+		{
+			return -ENOENT;
+		}
+		if (susfs_is_base_dentry_sdcard_dir(dir) &&
+			susfs_is_sus_sdcard_d_name_found(nd->last.name))
+		{
+			return -ENOENT;
+		}
+	}
 #endif
 
 	if (unlikely(IS_DEADDIR(dir_inode)))
 		return -ENOENT;
 
 	*opened &= ~FILE_CREATED;
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	if (is_nd_state_open_last) {
-		if (susfs_is_base_dentry_android_data_dir(dir) &&
-			susfs_is_sus_android_data_d_name_found(nd->last.name))
-		{
-			dentry = d_lookup(dir, &susfs_fake_qstr_name);
-			found_sus_path = true;
-			goto skip_orig_flow1;	
-		} else if (susfs_is_base_dentry_sdcard_dir(dir) &&
-			susfs_is_sus_sdcard_d_name_found(nd->last.name))
-		{
-			dentry = d_lookup(dir, &susfs_fake_qstr_name);
-			found_sus_path = true;
-			goto skip_orig_flow1;
-		}
-	}
-#endif
+
 	dentry = d_lookup(dir, &nd->last);
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	if (is_nd_state_open_last && dentry && !IS_ERR(dentry) && dentry->d_inode) {
+	if (dentry && !IS_ERR(dentry) && dentry->d_inode) {
 		if (susfs_is_inode_sus_path(dentry->d_inode)) {
 			dput(dentry);
-			dentry = d_lookup(dir, &susfs_fake_qstr_name);
-			found_sus_path = true;
+			return -ENOENT;
 		}
 	}
-skip_orig_flow1:
 #endif
 	for (;;) {
 		if (!dentry) {
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-			if (found_sus_path) {
-				dentry = d_alloc_parallel(dir, &susfs_fake_qstr_name, &wq);
-				goto skip_orig_flow2;
-			}
-#endif
 			dentry = d_alloc_parallel(dir, &nd->last, &wq);
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-skip_orig_flow2:
-#endif
 			if (IS_ERR(dentry))
 				return PTR_ERR(dentry);
 		}
