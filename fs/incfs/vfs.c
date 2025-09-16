@@ -1733,7 +1733,7 @@ static int dir_unlink(struct inode *dir, struct dentry *dentry)
 		goto out;
 	}
 
-	err = vfs_getattr(&backing_path, &stat);
+	err = vfs_getattr(&backing_path, &stat, STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
 	if (err)
 		goto out;
 
