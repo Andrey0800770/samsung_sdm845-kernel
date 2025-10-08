@@ -141,11 +141,11 @@
 #include <net/tcp.h>
 #include <net/busy_poll.h>
 
-// KNOX NPA - START
+#ifdef CONFIG_KNOX_NCM
 #include <linux/sched.h>
 #include <linux/pid.h>
 #include <net/ncm.h>
-// KNOX NPA - END
+#endif // CONFIG_KNOX_NCM
 
 static DEFINE_MUTEX(proto_list_mutex);
 static LIST_HEAD(proto_list);
@@ -632,7 +632,7 @@ out:
 	return ret;
 }
 
-// KNOX NPA - START
+#ifdef CONFIG_KNOX_NCM
 /** The function sets the domain name associated with the socket. **/
 static int sock_set_domain_name(struct sock *sk, char __user *optval,
                 int optlen)
@@ -719,7 +719,7 @@ out:
 	return ret;
 }
 
-// KNOX NPA - END
+#endif // CONFIG_KNOX_NCM
 
 static inline void sock_valbool_flag(struct sock *sk, int bit, int valbool)
 {
@@ -769,14 +769,14 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	if (optname == SO_BINDTODEVICE)
 		return sock_setbindtodevice(sk, optval, optlen);
 
-	// KNOX NPA - START
+	#ifdef CONFIG_KNOX_NCM
 	if (optname == SO_SET_DOMAIN_NAME)
 		return sock_set_domain_name(sk, optval, optlen);
 	if (optname == SO_SET_DNS_UID)
 		return sock_set_dns_uid(sk, optval, optlen);
 	if (optname == SO_SET_DNS_PID)
 		return sock_set_dns_pid(sk, optval, optlen);
-	// KNOX NPA - END
+	#endif // CONFIG_KNOX_NCM
 
 	if (optlen < sizeof(int))
 		return -EINVAL;
@@ -1505,7 +1505,7 @@ struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
 {
 	struct sock *sk;
 
-	// KNOX NPA - START
+	#ifdef CONFIG_KNOX_NCM
 	struct pid *pid_struct = NULL;
 	struct task_struct *task = NULL;
 	int process_returnValue = -1;
@@ -1514,12 +1514,12 @@ struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
 	struct task_struct *parent_task = NULL;
 	int parent_returnValue = -1;
 	char full_parent_process_name[PROCESS_NAME_LEN_NAP] = {0};
-	// KNOX NPA - END
+	#endif // CONFIG_KNOX_NCM
 
 	sk = sk_prot_alloc(prot, priority | __GFP_ZERO, family);
 	if (sk) {
 		sk->sk_family = family;
-		// KNOX NPA - START
+		#ifdef CONFIG_KNOX_NCM
 		/* assign values to members of sock structure when npa flag is present */
 		sk->knox_uid = current->cred->uid.val;
 		sk->knox_pid = current->tgid;
@@ -1561,7 +1561,7 @@ struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
 				}
 			}
 		}
-		// KNOX NPA - END
+		#endif // CONFIG_KNOX_NCM
 		/*
 		 * See comment in struct sock definition to understand
 		 * why we need sk_prot_creator -acme

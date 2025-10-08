@@ -28,10 +28,10 @@
 
 #include <net/netfilter/nf_conntrack_tuple.h>
 
-// KNOX NPA - START
+#ifdef CONFIG_KNOX_NCM
 #define PROCESS_NAME_LEN_NAP	128
 #define DOMAIN_NAME_LEN_NAP	255
-// KNOX NPA - END
+#endif // CONFIG_KNOX_NCM
 
 #define SIP_LIST_ELEMENTS	2
 
@@ -153,7 +153,7 @@ struct nf_conn {
 	/* Storage reserved for other modules, must be the last member */
 	union nf_conntrack_proto proto;
 
-	// KNOX NPA - START
+	#ifdef CONFIG_KNOX_NCM
 	/* The number of application layer bytes sent by the socket */
 	__u64   knox_sent;
 	/* The number of application layer bytes recieved by the socket */
@@ -183,7 +183,7 @@ struct nf_conn {
 	u32 npa_timeout;
 	/* Atomic variable indicating end of intermediate flow */
 	atomic_t intermediateFlow;
-	// KNOX NPA - END
+	#endif // CONFIG_KNOX_NCM
 };
 
 static inline struct nf_conn *
