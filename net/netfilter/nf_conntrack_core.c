@@ -1082,7 +1082,6 @@ static void gc_worker(struct work_struct *work)
 
 		hlist_nulls_for_each_entry_rcu(h, n, &ct_hash[i], hnnode) {
 			tmp = nf_ct_tuplehash_to_ctrack(h);
-
 			scanned++;
 			if (nf_ct_is_expired(tmp)) {
 				nf_ct_gc_expired(tmp);
@@ -1095,8 +1094,8 @@ static void gc_worker(struct work_struct *work)
 					tmp->npa_timeout = ((u32)(jiffies)) + (get_intermediate_timeout() * HZ);
 					knox_collect_conntrack_data(tmp, NCM_FLOW_TYPE_INTERMEDIATE, 20);
 				}
-			}
 			#endif // CONFIG_KNOX_NCM
+			}
 	    }
 		/* could check get_nulls_value() here and restart if ct
 		 * was moved to another chain.  But given gc is best-effort

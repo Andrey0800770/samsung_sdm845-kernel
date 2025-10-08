@@ -432,11 +432,11 @@ struct skb_shared_info {
 	 * remains valid until skb destructor */
 	void *		destructor_arg;
 
-// ------------- START of KNOX_VPN ------------------//
+#ifdef CONFIG_KNOX_NCM
 	uid_t uid;
 	pid_t pid;
 	u_int32_t knox_mark;
-// ------------- END of KNOX_VPN -------------------//
+#endif // CONFIG_KNOX_NCM
 
 	/* must be last field, see pskb_expand_head() */
 	skb_frag_t	frags[MAX_SKB_FRAGS];
