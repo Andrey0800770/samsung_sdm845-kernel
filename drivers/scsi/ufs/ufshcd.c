@@ -4541,6 +4541,103 @@ out:
 }
 
 /**
+ * ufshcd_read_health_desc - read health descriptor
+ * @hba: pointer to adapter instance
+ * @preopl_info: pointer to pre-eol info
+ * @lifetime_a: pointer to lifetime estimate A
+ * @lifetime_b: pointer to lifetime estimate B
+ *
+ * Read health descriptor and extract Pre-EOL and lifetime values
+ *
+ * Return 0 in case of success, non-zero otherwise
+ */
+static int ufshcd_read_health_desc(struct ufs_hba *hba, 
+                                   u8 *preopl_info,
+                                   u8 *lifetime_a, 
+                                   u8 *lifetime_b)
+{
+    int err;
+    u8 desc_buf[QUERY_DESC_HEALTH_MAX_SIZE];
+    int buf_len = QUERY_DESC_HEALTH_MAX_SIZE;
+
+    if (pm_runtime_suspended(hba->dev)) {
+        dev_dbg(hba->dev, "Device suspended, skipping health read\n");
+        return -EBUSY;
+    }
+
+    err = ufshcd_query_descriptor(hba,
+                                 UPIU_QUERY_OPCODE_READ_DESC,
+                                 QUERY_DESC_IDN_HEALTH,
+                                 0,
+                                 0,
+                                 desc_buf,
+                                 &buf_len);
+
+    if (err) {
+        dev_err(hba->dev, "%s: Failed reading health descriptor (err=%d)\n",
+                __func__, err);
+        goto out;
+    }
+     /*
+     * HEALTH_DEVICE_DESC_PARAM_INFO = 0x2 (bPreEOLInfo)
+     * HEALTH_DEVICE_DESC_PARAM_LIFETIMEA = 0x3 (bDeviceLifeTimeEstA)
+     * HEALTH_DEVICE_DESC_PARAM_LIFETIMEB = 0x4 (bDeviceLifeTimeEstB)
+     */
+    *preopl_info = desc_buf[HEALTH_DEVICE_DESC_PARAM_INFO];
+    *lifetime_a = desc_buf[HEALTH_DEVICE_DESC_PARAM_LIFETIMEA];
+    *lifetime_b = desc_buf[HEALTH_DEVICE_DESC_PARAM_LIFETIMEB];
+
+out:
+    pm_runtime_put_sync(hba->dev);
+    return err;
+}
+
+/**
+ * ufs_health_show - sysfs show function for UFS health
+ * @dev: device
+ * @attr: device attribute
+ * @buf: buffer for output
+ *
+ * Returns number of characters written to buffer
+ */
+static ssize_t ufs_health_show(struct device *dev,
+                               struct device_attribute *attr,
+                               char *buf)
+{
+    struct ufs_hba *hba = dev_get_drvdata(dev);
+    u8 preopl_info = 0;
+    u8 lifetime_a = 0;
+    u8 lifetime_b = 0;
+    int err;
+    
+    if (!hba)
+        return -EINVAL;
+    
+    err = ufshcd_read_health_desc(hba, &preopl_info, &lifetime_a, &lifetime_b);
+    if (err)
+        return err;
+    
+    return scnprintf(buf, PAGE_SIZE,
+                    "PreEOL Info: 0x%02x\n"
+                    "Lifetime A: 0x%02x\n"
+                    "Lifetime B: 0x%02x\n",
+                    preopl_info,
+                    lifetime_a,
+                    lifetime_b);
+}
+
+static DEVICE_ATTR_RO(ufs_health);
+
+static struct attribute *ufs_sysfs_health_attrs[] = {
+    &dev_attr_ufs_health.attr,
+    NULL
+};
+
+static const struct attribute_group ufs_sysfs_health_group = {
+    .attrs = ufs_sysfs_health_attrs,
+};
+
+/**
  * ufshcd_read_unit_desc_param - read the specified unit descriptor parameter
  * @hba: Pointer to adapter instance
  * @lun: lun id
@@ -9181,6 +9278,9 @@ static void ufshcd_async_scan(void *data, async_cookie_t cookie)
 	ufshcd_probe_hba(hba);
 	ufshcd_release_all(hba);
 
+	if (sysfs_create_group(&hba->dev->kobj, &ufs_sysfs_health_group)) {
+		dev_err(hba->dev, "Failed to create health sysfs group\n");
+	}
 	ufshcd_extcon_register(hba);
 }
 
@@ -11269,6 +11369,7 @@ ufshcd_exit_latency_hist(struct ufs_hba *hba)
  */
 void ufshcd_remove(struct ufs_hba *hba)
 {
+	sysfs_remove_group(&hba->dev->kobj, &ufs_sysfs_health_group);
 	scsi_remove_host(hba->host);
 	/* disable interrupts */
 	ufshcd_disable_intr(hba, hba->intr_mask);
