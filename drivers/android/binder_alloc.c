@@ -30,25 +30,21 @@
 #include <linux/list_lru.h>
 #include <linux/uaccess.h>
 #include <linux/highmem.h>
+#include <linux/ratelimit.h>
 #include "binder_alloc.h"
 #include "binder_trace.h"
 
-#ifdef CONFIG_SAMSUNG_FREECESS
-#include <linux/freecess.h>
-#endif
-
 struct list_lru binder_alloc_lru;
-
-extern int system_server_pid;
 
 static DEFINE_MUTEX(binder_alloc_mmap_lock);
 
 enum {
+	BINDER_DEBUG_USER_ERROR             = 1U << 0,
 	BINDER_DEBUG_OPEN_CLOSE             = 1U << 1,
 	BINDER_DEBUG_BUFFER_ALLOC           = 1U << 2,
 	BINDER_DEBUG_BUFFER_ALLOC_ASYNC     = 1U << 3,
 };
-static uint32_t binder_alloc_debug_mask;
+static uint32_t binder_alloc_debug_mask = 0;
 
 module_param_named(debug_mask, binder_alloc_debug_mask,
 		   uint, 0644);
@@ -56,7 +52,7 @@ module_param_named(debug_mask, binder_alloc_debug_mask,
 #define binder_alloc_debug(mask, x...) \
 	do { \
 		if (binder_alloc_debug_mask & mask) \
-			pr_info(x); \
+			pr_info_ratelimited(x); \
 	} while (0)
 
 static struct binder_buffer *binder_buffer_next(struct binder_buffer *buffer)
@@ -225,12 +221,18 @@ static int binder_update_page_range(struct binder_alloc *alloc, int allocate,
 
 	if (mm) {
 		down_read(&mm->mmap_sem);
+		if (!mmget_still_valid(mm)) {
+			if (allocate == 0)
+				goto free_range;
+			goto err_no_vma;
+		}
 		vma = alloc->vma;
 	}
 
 	if (!vma && need_mm) {
-		pr_err("%d: binder_alloc_buf failed to map pages in userspace, no vma\n",
-			alloc->pid);
+		binder_alloc_debug(BINDER_DEBUG_USER_ERROR,
+				   "%d: binder_alloc_buf failed to map pages in userspace, no vma\n",
+				   alloc->pid);
 		goto err_no_vma;
 	}
 
@@ -319,12 +321,56 @@ err_no_vma:
 	return vma ? -ENOMEM : -ESRCH;
 }
 
+static bool debug_low_async_space_locked(struct binder_alloc *alloc, int pid)
+{
+	/*
+	 * Find the amount and size of buffers allocated by the current caller;
+	 * The idea is that once we cross the threshold, whoever is responsible
+	 * for the low async space is likely to try to send another async txn,
+	 * and at some point we'll catch them in the act. This is more efficient
+	 * than keeping a map per pid.
+	 */
+	struct rb_node *n = alloc->free_buffers.rb_node;
+	struct binder_buffer *buffer;
+	size_t total_alloc_size = 0;
+	size_t num_buffers = 0;
+
+	for (n = rb_first(&alloc->allocated_buffers); n != NULL;
+		 n = rb_next(n)) {
+		buffer = rb_entry(n, struct binder_buffer, rb_node);
+		if (buffer->pid != pid)
+			continue;
+		if (!buffer->async_transaction)
+			continue;
+		total_alloc_size += binder_alloc_buffer_size(alloc, buffer)
+			+ sizeof(struct binder_buffer);
+		num_buffers++;
+	}
+
+	/*
+	 * Warn if this pid has more than 50 transactions, or more than 50% of
+	 * async space (which is 25% of total buffer size). Oneway spam is only
+	 * detected when the threshold is exceeded.
+	 */
+	if (num_buffers > 50 || total_alloc_size > alloc->buffer_size / 4) {
+		binder_alloc_debug(BINDER_DEBUG_USER_ERROR,
+			     "%d: pid %d spamming oneway? %zd buffers allocated for a total size of %zd\n",
+			      alloc->pid, pid, num_buffers, total_alloc_size);
+		if (!alloc->oneway_spam_detected) {
+			alloc->oneway_spam_detected = true;
+			return true;
+		}
+	}
+	return false;
+}
+
 static struct binder_buffer *binder_alloc_new_buf_locked(
 				struct binder_alloc *alloc,
 				size_t data_size,
 				size_t offsets_size,
 				size_t extra_buffers_size,
-				int is_async)
+				int is_async,
+				int pid)
 {
 	struct rb_node *n = alloc->free_buffers.rb_node;
 	struct binder_buffer *buffer;
@@ -335,13 +381,10 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 	size_t size, data_offsets_size;
 	int ret;
 
-#ifdef CONFIG_SAMSUNG_FREECESS
-	struct task_struct *p = NULL;
-#endif
-
 	if (alloc->vma == NULL) {
-		pr_err("%d: binder_alloc_buf, no vma\n",
-		       alloc->pid);
+		binder_alloc_debug(BINDER_DEBUG_USER_ERROR,
+				   "%d: binder_alloc_buf, no vma\n",
+				   alloc->pid);
 		return ERR_PTR(-ESRCH);
 	}
 
@@ -361,41 +404,11 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 				alloc->pid, extra_buffers_size);
 		return ERR_PTR(-EINVAL);
 	}
-    
-#ifdef CONFIG_SAMSUNG_FREECESS
-	if (is_async && (alloc->free_async_space < 3*(size + sizeof(struct binder_buffer))
-		|| (alloc->free_async_space < ((alloc->buffer_size/2)*9/10)))) {
-		rcu_read_lock();
-		p = find_task_by_vpid(alloc->pid);
-		rcu_read_unlock();
-		if (p != NULL && thread_group_is_frozen(p)) {
-			binder_report(p, -1, "free_buffer_full", is_async);
-		}
-	}
-#endif
-
 	if (is_async &&
 	    alloc->free_async_space < size + sizeof(struct binder_buffer)) {
-		//binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
-		//	     "%d: binder_alloc_buf size %zd failed, no async space left\n",
-		//	      alloc->pid, size);
-		pr_info("%d: binder_alloc_buf size %zd(%zd) failed, no async space left\n",
-			     alloc->pid, size, alloc->free_async_space);
-
-		return ERR_PTR(-ENOSPC);
-	}
-
-	if (is_async &&
-	    524288 <= size + sizeof(struct binder_buffer)) { //512K
-		pr_info("%d: binder_alloc_buf size %zd(%zd) failed, too large async size\n",
-			     alloc->pid, size, alloc->free_async_space);
-
-		return ERR_PTR(-ENOSPC);
-	}
-	if (1048576 <= size + sizeof(struct binder_buffer)) { //1M
-		pr_info("%d: binder_alloc_buf size %zd failed, too large size\n",
-			     alloc->pid, size);
-
+		binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC,
+			     "%d: binder_alloc_buf size %zd failed, no async space left\n",
+			      alloc->pid, size);
 		return ERR_PTR(-ENOSPC);
 	}
 
@@ -443,11 +456,14 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 			if (buffer_size > largest_free_size)
 				largest_free_size = buffer_size;
 		}
-		pr_err("%d: binder_alloc_buf size %zd failed, no address space\n",
-			alloc->pid, size);
-		pr_err("allocated: %zd (num: %zd largest: %zd), free: %zd (num: %zd largest: %zd)\n",
-		       total_alloc_size, allocated_buffers, largest_alloc_size,
-		       total_free_size, free_buffers, largest_free_size);
+		binder_alloc_debug(BINDER_DEBUG_USER_ERROR,
+				   "%d: binder_alloc_buf size %zd failed, no address space\n",
+				   alloc->pid, size);
+		binder_alloc_debug(BINDER_DEBUG_USER_ERROR,
+				   "allocated: %zd (num: %zd largest: %zd), free: %zd (num: %zd largest: %zd)\n",
+				   total_alloc_size, allocated_buffers,
+				   largest_alloc_size, total_free_size,
+				   free_buffers, largest_free_size);
 		return ERR_PTR(-ENOSPC);
 	}
 	if (n == NULL) {
@@ -497,19 +513,23 @@ static struct binder_buffer *binder_alloc_new_buf_locked(
 	buffer->offsets_size = offsets_size;
 	buffer->async_transaction = is_async;
 	buffer->extra_buffers_size = extra_buffers_size;
+	buffer->pid = pid;
+	buffer->oneway_spam_suspect = false;
 	if (is_async) {
 		alloc->free_async_space -= size + sizeof(struct binder_buffer);
-		if ((system_server_pid == alloc->pid) && (alloc->free_async_space <= 153600)) { // 150K
-			pr_info("%d: [free_size<150K] binder_alloc_buf size %zd async free %zd\n",
-                                 alloc->pid, size, alloc->free_async_space);
-                }
-		if ((system_server_pid == alloc->pid) && (size >= 122880)) { // 120K
-			pr_info("%d: [alloc_size>120K] binder_alloc_buf size %zd async free %zd\n",
-				alloc->pid, size, alloc->free_async_space);
-		}
 		binder_alloc_debug(BINDER_DEBUG_BUFFER_ALLOC_ASYNC,
 			     "%d: binder_alloc_buf size %zd async free %zd\n",
 			      alloc->pid, size, alloc->free_async_space);
+		if (alloc->free_async_space < alloc->buffer_size / 10) {
+			/*
+			 * Start detecting spammers once we have less than 20%
+			 * of async space left (which is less than 10% of total
+			 * buffer size).
+			 */
+			buffer->oneway_spam_suspect = debug_low_async_space_locked(alloc, pid);
+		} else {
+			alloc->oneway_spam_detected = false;
+		}
 	}
 	return buffer;
 
@@ -527,6 +547,7 @@ err_alloc_buf_struct_failed:
  * @offsets_size:       user specified buffer offset
  * @extra_buffers_size: size of extra space for meta-data (eg, security context)
  * @is_async:           buffer for async transaction
+ * @pid:				pid to attribute allocation to (used for debugging)
  *
  * Allocate a new buffer given the requested sizes. Returns
  * the kernel version of the buffer pointer. The size allocated
@@ -539,13 +560,14 @@ struct binder_buffer *binder_alloc_new_buf(struct binder_alloc *alloc,
 					   size_t data_size,
 					   size_t offsets_size,
 					   size_t extra_buffers_size,
-					   int is_async)
+					   int is_async,
+					   int pid)
 {
 	struct binder_buffer *buffer;
 
 	mutex_lock(&alloc->mutex);
 	buffer = binder_alloc_new_buf_locked(alloc, data_size, offsets_size,
-					     extra_buffers_size, is_async);
+					     extra_buffers_size, is_async, pid);
 	mutex_unlock(&alloc->mutex);
 	return buffer;
 }
@@ -665,6 +687,8 @@ static void binder_free_buf_locked(struct binder_alloc *alloc,
 	binder_insert_free_buffer(alloc, buffer);
 }
 
+static void binder_alloc_clear_buf(struct binder_alloc *alloc,
+				   struct binder_buffer *buffer);
 /**
  * binder_alloc_free_buf() - free a binder buffer
  * @alloc:	binder_alloc for this proc
@@ -675,6 +699,18 @@ static void binder_free_buf_locked(struct binder_alloc *alloc,
 void binder_alloc_free_buf(struct binder_alloc *alloc,
 			    struct binder_buffer *buffer)
 {
+	/*
+	 * We could eliminate the call to binder_alloc_clear_buf()
+	 * from binder_alloc_deferred_release() by moving this to
+	 * binder_alloc_free_buf_locked(). However, that could
+	 * increase contention for the alloc mutex if clear_on_free
+	 * is used frequently for large buffers. The mutex is not
+	 * needed for correctness here.
+	 */
+	if (buffer->clear_on_free) {
+		binder_alloc_clear_buf(alloc, buffer);
+		buffer->clear_on_free = false;
+	}
 	mutex_lock(&alloc->mutex);
 	binder_free_buf_locked(alloc, buffer);
 	mutex_unlock(&alloc->mutex);
@@ -710,11 +746,6 @@ int binder_alloc_mmap_handler(struct binder_alloc *alloc,
 	alloc->buffer = (void __user *)vma->vm_start;
 	mutex_unlock(&binder_alloc_mmap_lock);
 
-	if (vma->vm_end - vma->vm_start < BINDER_MIN_ALLOC) {
-		ret = -EINVAL;
-		failure_string = "VMA size < BINDER_MIN_ALLOC";
-		goto err_vma_too_small;
-	}
 	alloc->pages = kzalloc(sizeof(alloc->pages[0]) *
 				   ((vma->vm_end - vma->vm_start) / PAGE_SIZE),
 			       GFP_KERNEL);
@@ -749,13 +780,14 @@ err_alloc_buf_struct_failed:
 	kfree(alloc->pages);
 	alloc->pages = NULL;
 err_alloc_pages_failed:
-err_vma_too_small:
 	mutex_lock(&binder_alloc_mmap_lock);
 	alloc->buffer = NULL;
 err_already_mapped:
 	mutex_unlock(&binder_alloc_mmap_lock);
-	pr_err("%s: %d %lx-%lx %s failed %d\n", __func__,
-	       alloc->pid, vma->vm_start, vma->vm_end, failure_string, ret);
+	binder_alloc_debug(BINDER_DEBUG_USER_ERROR,
+			   "%s: %d %lx-%lx %s failed %d\n", __func__,
+			   alloc->pid, vma->vm_start, vma->vm_end,
+			   failure_string, ret);
 	return ret;
 }
 
@@ -776,6 +808,10 @@ void binder_alloc_deferred_release(struct binder_alloc *alloc)
 		/* Transaction should already have been freed */
 		BUG_ON(buffer->transaction);
 
+		if (buffer->clear_on_free) {
+			binder_alloc_clear_buf(alloc, buffer);
+			buffer->clear_on_free = false;
+		}
 		binder_free_buf_locked(alloc, buffer);
 		buffers++;
 	}
@@ -945,7 +981,7 @@ enum lru_status binder_alloc_free_page(struct list_head *item,
 
 	index = page - alloc->pages;
 	page_addr = (uintptr_t)alloc->buffer + index * PAGE_SIZE;
-	
+
 	mm = alloc->vma_vm_mm;
 	if (!mmget_not_zero(mm))
 		goto err_mmget;
@@ -1103,6 +1139,36 @@ static struct page *binder_alloc_get_page(struct binder_alloc *alloc,
 }
 
 /**
+ * binder_alloc_clear_buf() - zero out buffer
+ * @alloc: binder_alloc for this proc
+ * @buffer: binder buffer to be cleared
+ *
+ * memset the given buffer to 0
+ */
+static void binder_alloc_clear_buf(struct binder_alloc *alloc,
+				   struct binder_buffer *buffer)
+{
+	size_t bytes = binder_alloc_buffer_size(alloc, buffer);
+	binder_size_t buffer_offset = 0;
+
+	while (bytes) {
+		unsigned long size;
+		struct page *page;
+		pgoff_t pgoff;
+		void *kptr;
+
+		page = binder_alloc_get_page(alloc, buffer,
+					     buffer_offset, &pgoff);
+		size = min_t(size_t, bytes, PAGE_SIZE - pgoff);
+		kptr = kmap(page) + pgoff;
+		memset(kptr, 0, size);
+		kunmap(page);
+		bytes -= size;
+		buffer_offset += size;
+	}
+}
+
+/**
  * binder_alloc_copy_user_to_buffer() - copy src user to tgt user
  * @alloc: binder_alloc for this proc
  * @buffer: binder buffer to be accessed
@@ -1204,3 +1270,8 @@ void binder_alloc_copy_from_buffer(struct binder_alloc *alloc,
 				    dest, bytes);
 }
 
+void binder_alloc_shrinker_exit(void)
+{
+	unregister_shrinker(&binder_shrinker);
+	list_lru_destroy(&binder_alloc_lru);
+}
