@@ -15,6 +15,7 @@
 #include <linux/statfs.h>
 #include <linux/random.h>
 #include <linux/susfs.h>
+#include <linux/hashtable.h>
 #include "mount.h"
 
 static spinlock_t susfs_spin_lock;
@@ -44,6 +45,90 @@ bool susfs_starts_with(const char *str, const char *prefix) {
 
 /* sus_path */
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+struct susfs_persistent_entry {
+    struct hlist_node node;
+    unsigned long ino;
+    dev_t dev;
+    unsigned long flags;
+    unsigned int uid;
+};
+
+// Using a hash table is more efficient (O(1) average) for lookups than an rbtree (O(log n)).
+// 2^8 = 256 buckets.
+#define SUSFS_PERSISTENT_HT_BITS 8
+static DEFINE_HASHTABLE(susfs_persistent_ht, SUSFS_PERSISTENT_HT_BITS);
+static DEFINE_SPINLOCK(susfs_persistent_lock);
+
+static struct susfs_persistent_entry *susfs_find_persistent_entry(unsigned long ino, dev_t dev) {
+    struct susfs_persistent_entry *entry;
+    hash_for_each_possible(susfs_persistent_ht, entry, node, ino) {
+        if (entry->ino == ino && entry->dev == dev) {
+            return entry;
+        }
+    }
+    return NULL;
+}
+
+static int susfs_insert_persistent_entry(struct susfs_persistent_entry *new_entry) {
+    struct susfs_persistent_entry *existing_entry;
+
+    existing_entry = susfs_find_persistent_entry(new_entry->ino, new_entry->dev);
+    if (existing_entry) {
+        // Entry already exists, update it
+        existing_entry->flags = new_entry->flags;
+        existing_entry->uid = new_entry->uid;
+        kfree(new_entry); // Free the new entry as it's not needed
+        return 0;
+    }
+
+    // Entry does not exist, add it to the hash table
+    hash_add(susfs_persistent_ht, &new_entry->node, new_entry->ino);
+    return 0;
+}
+
+static void susfs_set_persistent_flags(struct inode *inode, unsigned long flags, unsigned int uid) {
+    struct susfs_persistent_entry *entry;
+    unsigned long irq_flags;
+    
+    entry = kmalloc(sizeof(struct susfs_persistent_entry), GFP_KERNEL);
+    if (!entry)
+        return;
+    
+    entry->ino = inode->i_ino;
+    entry->dev = inode->i_sb->s_dev;
+    entry->flags = flags;
+    entry->uid = uid;
+    
+    spin_lock_irqsave(&susfs_persistent_lock, irq_flags);
+    susfs_insert_persistent_entry(entry);
+    spin_unlock_irqrestore(&susfs_persistent_lock, irq_flags);
+    
+    spin_lock(&inode->i_lock);
+    set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
+    spin_unlock(&inode->i_lock);
+}
+
+static bool susfs_check_persistent_flags(struct inode *inode) {
+    struct susfs_persistent_entry *entry;
+    unsigned long irq_flags;
+    bool result = false;
+    
+    if (unlikely(inode->i_mapping->flags & BIT_SUS_PATH))
+        return true;
+    
+    spin_lock_irqsave(&susfs_persistent_lock, irq_flags);
+    entry = susfs_find_persistent_entry(inode->i_ino, inode->i_sb->s_dev);
+    if (entry && (entry->flags & BIT_SUS_PATH)) {
+        spin_lock(&inode->i_lock);
+        set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
+        spin_unlock(&inode->i_lock);
+        result = true;
+    }
+    spin_unlock_irqrestore(&susfs_persistent_lock, irq_flags);
+    
+    return result;
+}
+
 static LIST_HEAD(LH_SUS_PATH_LOOP);
 static LIST_HEAD(LH_SUS_PATH_ANDROID_DATA);
 static LIST_HEAD(LH_SUS_PATH_SDCARD);
@@ -178,6 +263,7 @@ int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info) {
 				SUSFS_LOGI("target_ino: '%lu', target_pathname: '%s', i_uid: '%u', is successfully updated to LH_SUS_PATH_ANDROID_DATA\n",
 							cursor->info.target_ino, cursor->target_pathname, cursor->info.i_uid);
 				spin_unlock(&susfs_spin_lock);
+				susfs_set_persistent_flags(inode, BIT_SUS_PATH, info.i_uid);
 				goto out_kfree_tmp_buf;
 			}
 		}
@@ -197,6 +283,7 @@ int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info) {
 		SUSFS_LOGI("target_ino: '%lu', target_pathname: '%s', i_uid: '%u', is successfully added to LH_SUS_PATH_ANDROID_DATA\n",
 					new_list->info.target_ino, new_list->target_pathname, new_list->info.i_uid);
 		spin_unlock(&susfs_spin_lock);
+		susfs_set_persistent_flags(inode, BIT_SUS_PATH, info.i_uid);
 		goto out_kfree_tmp_buf;
 	} else if (strstr(resolved_pathname, sdcard_path.pathname)) {
 		if (!sdcard_path.is_inited) {
@@ -215,6 +302,7 @@ int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info) {
 				SUSFS_LOGI("target_ino: '%lu', target_pathname: '%s', i_uid: '%u', is successfully updated to LH_SUS_PATH_SDCARD\n",
 							cursor->info.target_ino, cursor->target_pathname, cursor->info.i_uid);
 				spin_unlock(&susfs_spin_lock);
+				susfs_set_persistent_flags(inode, BIT_SUS_PATH, info.i_uid);
 				goto out_kfree_tmp_buf;
 			}
 		}
@@ -234,13 +322,13 @@ int susfs_add_sus_path(struct st_susfs_sus_path* __user user_info) {
 		SUSFS_LOGI("target_ino: '%lu', target_pathname: '%s', i_uid: '%u', is successfully added to LH_SUS_PATH_SDCARD\n",
 					new_list->info.target_ino, new_list->target_pathname, new_list->info.i_uid);
 		spin_unlock(&susfs_spin_lock);
+		susfs_set_persistent_flags(inode, BIT_SUS_PATH, info.i_uid);
 		goto out_kfree_tmp_buf;
 	}
 
-	spin_lock(&inode->i_lock);
-	set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
+	susfs_set_persistent_flags(inode, BIT_SUS_PATH, info.i_uid);
 	SUSFS_LOGI("pathname: '%s', ino: '%lu', is flagged as AS_FLAGS_SUS_PATH\n", resolved_pathname, info.target_ino);
-	spin_unlock(&inode->i_lock);
+
 out_kfree_tmp_buf:
 	kfree(tmp_buf);
 out_path_put_path:
@@ -324,11 +412,11 @@ int susfs_add_sus_path_loop(struct st_susfs_sus_path* __user user_info) {
 	SUSFS_LOGI("target_ino: '%lu', target_pathname: '%s', i_uid: '%u', is successfully added to LH_SUS_PATH_LOOP\n",
 				new_list->info.target_ino, new_list->target_pathname, new_list->info.i_uid);
 	spin_unlock(&susfs_spin_lock);
+
 out_set_sus_path:
-	spin_lock(&inode->i_lock);
-	set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
+	susfs_set_persistent_flags(inode, BIT_SUS_PATH, info.i_uid);
 	SUSFS_LOGI("pathname: '%s', ino: '%lu', is flagged as AS_FLAGS_SUS_PATH\n", resolved_pathname, info.target_ino);
-	spin_unlock(&inode->i_lock);
+
 out_kfree_tmp_buf:
 	kfree(tmp_buf);
 out_path_put_path:
@@ -344,9 +432,7 @@ void susfs_run_sus_path_loop(uid_t uid) {
 	list_for_each_entry_safe(cursor, temp, &LH_SUS_PATH_LOOP, list) {
 		if (!kern_path(cursor->target_pathname, 0, &path)) {
 			inode = path.dentry->d_inode;
-			spin_lock(&inode->i_lock);
-			set_bit(AS_FLAGS_SUS_PATH, &inode->i_mapping->flags);
-			spin_unlock(&inode->i_lock);
+			susfs_set_persistent_flags(inode, BIT_SUS_PATH, cursor->info.i_uid);
 			path_put(&path);
 			SUSFS_LOGI("re-flag '%s' as SUS_PATH for uid: %u\n", cursor->target_pathname, uid);
 		}
@@ -383,9 +469,9 @@ bool susfs_is_sus_android_data_d_name_found(const char *d_name) {
 	}
 
 	list_for_each_entry_safe(cursor, temp, &LH_SUS_PATH_ANDROID_DATA, list) {
-		// - we use strstr here because we cannot retrieve the dentry of fuse_dentry
-		//   and attacker can still use path travesal attack to detect the path, but
-		//   lucky we can check for the uid so it won't let them fool us
+               // - we use strstr here because we cannot retrieve the dentry of fuse_dentry
+               //   and attacker can still use path travesal attack to detect the path, but
+               //   lucky we can check for the uid so it won't let them fool us
 		if (!strncmp(d_name, cursor->info.target_pathname, cursor->path_len) &&
 		    (d_name[cursor->path_len] == '\0' || d_name[cursor->path_len] == '/') &&
 			is_i_uid_in_android_data_not_allowed(cursor->info.i_uid))
@@ -417,7 +503,7 @@ bool susfs_is_sus_sdcard_d_name_found(const char *d_name) {
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 bool susfs_is_inode_sus_path(struct mnt_idmap* idmap, struct inode *inode) {
-	if (unlikely(inode->i_mapping->flags & BIT_SUS_PATH &&
+	if (unlikely(susfs_check_persistent_flags(inode) &&
 		is_i_uid_not_allowed(i_uid_into_vfsuid(idmap, inode).val)))
 	{
 		SUSFS_LOGI("hiding path with ino '%lu'\n", inode->i_ino);
@@ -427,7 +513,7 @@ bool susfs_is_inode_sus_path(struct mnt_idmap* idmap, struct inode *inode) {
 }
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 bool susfs_is_inode_sus_path(struct inode *inode) {
-	if (unlikely(inode->i_mapping->flags & BIT_SUS_PATH &&
+	if (unlikely(susfs_check_persistent_flags(inode) &&
 		is_i_uid_not_allowed(i_uid_into_mnt(i_user_ns(inode), inode).val)))
 	{
 		SUSFS_LOGI("hiding path with ino '%lu'\n", inode->i_ino);
@@ -437,7 +523,7 @@ bool susfs_is_inode_sus_path(struct inode *inode) {
 }
 #else
 bool susfs_is_inode_sus_path(struct inode *inode) {
-	if (unlikely(inode->i_mapping->flags & BIT_SUS_PATH &&
+	if (unlikely(susfs_check_persistent_flags(inode) &&
 		is_i_uid_not_allowed(inode->i_uid.val)))
 	{
 		SUSFS_LOGI("hiding path with ino '%lu'\n", inode->i_ino);
@@ -1054,6 +1140,7 @@ int susfs_spoof_cmdline_or_bootconfig(struct seq_file *m) {
 /* open_redirect */
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 static DEFINE_HASHTABLE(OPEN_REDIRECT_HLIST, 10);
+static DEFINE_SPINLOCK(open_redirect_lock);
 static int susfs_update_open_redirect_inode(struct st_susfs_open_redirect_hlist *new_entry) {
 	struct path path_target;
 	struct inode *inode_target;
@@ -1130,6 +1217,32 @@ int susfs_add_open_redirect(struct st_susfs_open_redirect* __user user_info) {
 	}
 	spin_unlock(&susfs_spin_lock);
 	return 0;
+}
+
+bool susfs_is_inode_open_redirect(struct inode *inode) {
+    struct st_susfs_open_redirect_hlist *entry;
+
+    // Fast path: check the flag on the cached inode
+    if (test_bit(AS_FLAGS_OPEN_REDIRECT, &inode->i_mapping->flags)) {
+        return true;
+    }
+
+    // Slow path: check persistent storage if flag is missing
+    spin_lock(&open_redirect_lock);
+    hash_for_each_possible(OPEN_REDIRECT_HLIST, entry, node, inode->i_ino) {
+        if (entry->target_ino == inode->i_ino) {
+            spin_unlock(&open_redirect_lock);
+            // Found it! Re-apply the flag to the inode and return true.
+            spin_lock(&inode->i_lock);
+            set_bit(AS_FLAGS_OPEN_REDIRECT, &inode->i_mapping->flags);
+            spin_unlock(&inode->i_lock);
+            SUSFS_LOGI("Re-applied OPEN_REDIRECT flag to ino %lu\n", inode->i_ino);
+            return true;
+        }
+    }
+    spin_unlock(&open_redirect_lock);
+
+    return false;
 }
 
 struct filename* susfs_get_redirected_path(unsigned long ino) {
