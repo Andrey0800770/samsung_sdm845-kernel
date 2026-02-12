@@ -61,7 +61,6 @@
 extern bool susfs_is_current_ksu_domain(void);
 extern bool susfs_is_sdcard_android_data_decrypted;
 
-static DEFINE_IDA(susfs_ksu_mnt_group_ida);
 static atomic64_t susfs_ksu_mounts = ATOMIC64_INIT(0);
 
 #define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */
@@ -369,8 +368,8 @@ static int mnt_alloc_group_id(struct mount *mnt)
 	 *   if it is ksu mounts, until susfs_is_sdcard_android_data_decrypted is set to true
 	 *   when boot-completed stage is triggered in core_hook.c 
 	 */
-	if (!susfs_is_sdcard_android_data_decrypted && mnt->mnt_id >= DEFAULT_KSU_MNT_ID) {
-		res = ida_simple_get(&susfs_ksu_mnt_group_ida, DEFAULT_KSU_MNT_GROUP_ID, 0, GFP_KERNEL);
+	if (susfs_is_current_ksu_domain()) {
+		res = ida_simple_get(&mnt_group_ida, DEFAULT_KSU_MNT_GROUP_ID, 0, GFP_KERNEL);
 		if (res < 0)
 			return res;
 		mnt->mnt_group_id = res;
@@ -396,34 +395,10 @@ static int mnt_alloc_group_id(struct mount *mnt)
 void mnt_release_group_id(struct mount *mnt)
 {
 	int id;
-
-#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-	/* - when boot-completed stage is triggered in core_hook.c,
-	 *   susfs_is_sdcard_android_data_decrypted will be set to true.
-	 * - Please note that if susfs_is_sdcard_android_data_decrypted is true, then
-	 *   it no longer checks for the sus mnt_group_id, and the allocated
-	 *   sus mnt_group_id will stay in kernel memory forever, and if user
-	 *   suddenly umounts the sus mount in global mnt namespace, the ida_simple_remove()
-	 *   function will throw error to kernel log, but it won't affect the system,
-	 *   so it is fine.
-	 */
-	if (!susfs_is_sdcard_android_data_decrypted && mnt->mnt_group_id >= DEFAULT_KSU_MNT_GROUP_ID) {
-		ida_simple_remove(&susfs_ksu_mnt_group_ida, mnt->mnt_group_id);  // ← API antiga
-		mnt->mnt_group_id = 0;
-		return;
-	}
-#endif
-
 	id = mnt->mnt_group_id;
-#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-	if (id) {
-#endif
 		ida_remove(&mnt_group_ida, id);
 		if (mnt_group_start > id)
 			mnt_group_start = id;
-#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-	}
-#endif
 	mnt->mnt_group_id = 0;
 }
 
