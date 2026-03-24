@@ -4970,7 +4970,7 @@ int generic_readlink(struct dentry *dentry, char __user *buffer, int buflen)
 			return PTR_ERR(link);
 	}
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
-	if (PRE_CHECK_OPEN_REDIRECT(inode)) {
+	if (SUSFS_IS_INODE_OPEN_REDIRECT(inode)) {
 		res = susfs_open_redirect_spoof_vfs_readlink(inode, buffer, buflen);
 		if (!res) {
 			do_delayed_call(&done);
@@ -5001,28 +5001,19 @@ int vfs_readlink(struct dentry *dentry, char __user *buffer, int buflen)
 	int res;
 #endif
 
-	if (unlikely(!(inode->i_opflags & IOP_DEFAULT_READLINK))) {
-		if (unlikely(inode->i_op->readlink))
+	if (inode->i_op->readlink) {
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
-		{
-			if (PRE_CHECK_OPEN_REDIRECT(inode)) {
-				res = susfs_open_redirect_spoof_vfs_readlink(inode, buffer, buflen);
-				if (!res)
-					return res;
-			}
-			return inode->i_op->readlink(dentry, buffer, buflen);
+		if (PRE_CHECK_OPEN_REDIRECT(inode)) {
+			res = susfs_open_redirect_spoof_vfs_readlink(inode, buffer, buflen);
+			if (!res)
+				return res;
 		}
-#else
-			return inode->i_op->readlink(dentry, buffer, buflen);
 #endif
-
-		if (!d_is_symlink(dentry))
-			return -EINVAL;
-
-		spin_lock(&inode->i_lock);
-		inode->i_opflags |= IOP_DEFAULT_READLINK;
-		spin_unlock(&inode->i_lock);
+		return inode->i_op->readlink(dentry, buffer, buflen);
 	}
+
+	if (!d_is_symlink(dentry))
+		return -EINVAL;
 
 	return generic_readlink(dentry, buffer, buflen);
 }
