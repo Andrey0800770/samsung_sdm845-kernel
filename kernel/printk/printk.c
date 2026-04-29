@@ -3140,8 +3140,6 @@ void register_console(struct console *newcon)
 		    newcon->match(newcon, c->name, c->index, c->options) != 0) {
 			/* default matching */
 			BUILD_BUG_ON(sizeof(c->name) != sizeof(newcon->name));
-			if (strcmp(c->name, newcon->name) != 0)
-				continue;
 			if (newcon->index >= 0 &&
 			    newcon->index != c->index)
 				continue;
