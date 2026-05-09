@@ -1806,7 +1806,9 @@ static int tun_flags(struct tun_struct *tun)
 {
 	#ifdef CONFIG_KNOX_NCM
 	return tun->flags & (TUN_FEATURES | IFF_PERSIST | IFF_TUN | IFF_TAP | IFF_META_HDR);
-	#endif // CONFIG_KNOX_NCM
+	#else
+	return tun->flags & (TUN_FEATURES | IFF_PERSIST | IFF_TUN | IFF_TAP);
+	#endif
 }
 
 static ssize_t tun_show_flags(struct device *dev, struct device_attribute *attr,
