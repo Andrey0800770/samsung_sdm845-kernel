@@ -259,6 +259,7 @@ static int LZ4_isAligned(const void *ptr, size_t alignment)
 *  Types
 **************************************/
 #include <linux/types.h>
+#include <linux/vmalloc.h>
 typedef uint8_t BYTE;
 typedef uint16_t U16;
 typedef uint32_t U32;
@@ -1772,22 +1773,22 @@ int LZ4_compress_destSize_extState(void *state, const char *src, char *dst,
 int LZ4_compress_destSize(const char *src, char *dst, int *srcSizePtr,
 			  int targetDstSize)
 {
-#if (LZ4_HEAPMODE)
-	LZ4_stream_t *const ctx = (LZ4_stream_t *)ALLOC(sizeof(
-		LZ4_stream_t)); /* malloc-calloc always properly aligned */
+	/*
+	 * LZ4_stream_t is ~16 KB on stack (LZ4_MEMORY_USAGE_DEFAULT=14).
+	 * The kernel stack limit is 8 KB (or 4 KB on some configs), so a
+	 * stack allocation would trigger -Wframe-larger-than and silently
+	 * corrupt memory on overflow.  Always allocate from the heap.
+	 */
+	LZ4_stream_t *const ctx = (LZ4_stream_t *)vmalloc(sizeof(LZ4_stream_t));
+	int result;
+
 	if (ctx == NULL)
 		return 0;
-#else
-	LZ4_stream_t ctxBody;
-	LZ4_stream_t *const ctx = &ctxBody;
-#endif
 
-	int result = LZ4_compress_destSize_extState_internal(
+	result = LZ4_compress_destSize_extState_internal(
 		ctx, src, dst, srcSizePtr, targetDstSize, 1);
 
-#if (LZ4_HEAPMODE)
-	FREEMEM(ctx);
-#endif
+	vfree(ctx);
 	return result;
 }
 
