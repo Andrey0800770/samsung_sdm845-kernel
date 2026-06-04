@@ -66,6 +66,10 @@ static int statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf)
 	return retval;
 }
 
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+extern struct vfsmount *susfs_get_non_sus_vfsmnt_from_vfsmnt(struct vfsmount *vfsmnt);
+#endif //#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+
 #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 extern int susfs_open_redirect_spoof_vfs_statfs(struct inode *inode, struct kstatfs *buf);
 #endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
