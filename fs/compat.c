@@ -57,6 +57,7 @@
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 #include <linux/susfs_def.h>
 extern bool susfs_is_inode_sus_path(struct inode *inode);
+extern bool susfs_is_sus_path_ino(dev_t s_dev, unsigned long ino);
 #endif
 
 /*
@@ -850,9 +851,6 @@ static int compat_fillonedir(struct dir_context *ctx, const char *name,
 		container_of(ctx, struct compat_readdir_callback, ctx);
 	struct compat_old_linux_dirent __user *dirent;
 	compat_ulong_t d_ino;
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	struct inode *inode;
-#endif
 
 	if (buf->result)
 		return -EINVAL;
@@ -862,15 +860,28 @@ static int compat_fillonedir(struct dir_context *ctx, const char *name,
 		return -EOVERFLOW;
 	}
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	inode = ilookup(buf->sb, ino);
-	if (!inode) {
-		goto orig_flow;
-	}
-	if (susfs_is_inode_sus_path(inode)) {
-		iput(inode);
-		return 0;
-	}
-	iput(inode);
+    if (likely(!susfs_is_current_proc_umounted_app()))
+        goto orig_flow;
+
+    {
+        struct inode *inode = ilookup(buf->sb, ino);
+
+        if (!inode) {
+            if (susfs_is_sus_path_ino(buf->sb->s_dev, ino))
+                return 0;
+            goto orig_flow;
+        }
+        if (susfs_is_inode_sus_path(inode)) {
+            iput(inode);
+            return 0;
+        }
+        if (susfs_is_sus_path_ino(buf->sb->s_dev, ino)) {
+            set_bit(AS_FLAGS_SUS_PATH, &inode->i_state);
+            iput(inode);
+            return 0;
+        }
+        iput(inode);
+    }
 orig_flow:
 #endif
 	buf->result++;
@@ -942,9 +953,6 @@ static int compat_filldir(struct dir_context *ctx, const char *name, int namlen,
 	compat_ulong_t d_ino;
 	int reclen = ALIGN(offsetof(struct compat_linux_dirent, d_name) +
 		namlen + 2, sizeof(compat_long_t));
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	struct inode *inode;
-#endif
 
 	buf->error = -EINVAL;	/* only used if we fail.. */
 	if (reclen > buf->count)
@@ -955,15 +963,28 @@ static int compat_filldir(struct dir_context *ctx, const char *name, int namlen,
 		return -EOVERFLOW;
 	}
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	inode = ilookup(buf->sb, ino);
-	if (!inode) {
-		goto orig_flow;
-	}
-	if (susfs_is_inode_sus_path(inode)) {
-		iput(inode);
-		return 0;
-	}
-	iput(inode);
+    if (likely(!susfs_is_current_proc_umounted_app()))
+        goto orig_flow;
+
+    {
+        struct inode *inode = ilookup(buf->sb, ino);
+
+        if (!inode) {
+            if (susfs_is_sus_path_ino(buf->sb->s_dev, ino))
+                return 0;
+            goto orig_flow;
+        }
+        if (susfs_is_inode_sus_path(inode)) {
+            iput(inode);
+            return 0;
+        }
+        if (susfs_is_sus_path_ino(buf->sb->s_dev, ino)) {
+            set_bit(AS_FLAGS_SUS_PATH, &inode->i_state);
+            iput(inode);
+            return 0;
+        }
+        iput(inode);
+    }
 orig_flow:
 #endif
 	dirent = buf->previous;

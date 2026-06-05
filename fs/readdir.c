@@ -24,6 +24,7 @@
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
 #include <linux/susfs_def.h>
 extern bool susfs_is_inode_sus_path(struct inode *inode);
+extern bool susfs_is_sus_path_ino(dev_t s_dev, unsigned long ino); /* Bug #1+#2 */
 #endif
 int iterate_dir(struct file *file, struct dir_context *ctx)
 {
@@ -135,9 +136,6 @@ static int fillonedir(struct dir_context *ctx, const char *name, int namlen,
 		container_of(ctx, struct readdir_callback, ctx);
 	struct old_linux_dirent __user * dirent;
 	unsigned long d_ino;
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	struct inode *inode;
-#endif
 
 	if (buf->result)
 		return -EINVAL;
@@ -147,15 +145,28 @@ static int fillonedir(struct dir_context *ctx, const char *name, int namlen,
 		return -EOVERFLOW;
 	}
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	inode = ilookup(buf->sb, ino);
-	if (!inode) {
-		goto orig_flow;
-	}
-	if (susfs_is_inode_sus_path(inode)) {
-		iput(inode);
-		return 0;
-	}
-	iput(inode);
+    if (likely(!susfs_is_current_proc_umounted_app()))
+        goto orig_flow;
+
+    {
+        struct inode *inode = ilookup(buf->sb, ino);
+
+        if (!inode) {
+            if (susfs_is_sus_path_ino(buf->sb->s_dev, ino))
+                return 0;
+            goto orig_flow;
+        }
+        if (susfs_is_inode_sus_path(inode)) {
+            iput(inode);
+            return 0;
+        }
+        if (susfs_is_sus_path_ino(buf->sb->s_dev, ino)) {
+            set_bit(AS_FLAGS_SUS_PATH, &inode->i_state);
+            iput(inode);
+            return 0;
+        }
+        iput(inode);
+    }
 orig_flow:
 #endif
 	buf->result++;
@@ -233,9 +244,6 @@ static int filldir(struct dir_context *ctx, const char *name, int namlen,
 	unsigned long d_ino;
 	int reclen = ALIGN(offsetof(struct linux_dirent, d_name) + namlen + 2,
 		sizeof(long));
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	struct inode *inode;
-#endif
 
 	buf->error = verify_dirent_name(name, namlen);
 	if (unlikely(buf->error))
@@ -249,15 +257,28 @@ static int filldir(struct dir_context *ctx, const char *name, int namlen,
 		return -EOVERFLOW;
 	}
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	inode = ilookup(buf->sb, ino);
-	if (!inode) {
-		goto orig_flow;
-	}
-	if (susfs_is_inode_sus_path(inode)) {
-		iput(inode);
-		return 0;
-	}
-	iput(inode);
+    if (likely(!susfs_is_current_proc_umounted_app()))
+        goto orig_flow;
+
+    {
+        struct inode *inode = ilookup(buf->sb, ino);
+
+        if (!inode) {
+            if (susfs_is_sus_path_ino(buf->sb->s_dev, ino))
+                return 0;
+            goto orig_flow;
+        }
+        if (susfs_is_inode_sus_path(inode)) {
+            iput(inode);
+            return 0;
+        }
+        if (susfs_is_sus_path_ino(buf->sb->s_dev, ino)) {
+            set_bit(AS_FLAGS_SUS_PATH, &inode->i_state);
+            iput(inode);
+            return 0;
+        }
+        iput(inode);
+    }
 orig_flow:
 #endif
 	dirent = buf->previous;
@@ -343,9 +364,6 @@ static int filldir64(struct dir_context *ctx, const char *name, int namlen,
 		container_of(ctx, struct getdents_callback64, ctx);
 	int reclen = ALIGN(offsetof(struct linux_dirent64, d_name) + namlen + 1,
 		sizeof(u64));
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	struct inode *inode;
-#endif
 
 	buf->error = verify_dirent_name(name, namlen);
 	if (unlikely(buf->error))
@@ -361,15 +379,28 @@ static int filldir64(struct dir_context *ctx, const char *name, int namlen,
 			goto efault;
 	}
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-	inode = ilookup(buf->sb, ino);
-	if (!inode) {
-		goto orig_flow;
-	}
-	if (susfs_is_inode_sus_path(inode)) {
-		iput(inode);
-		return 0;
-	}
-	iput(inode);
+    if (likely(!susfs_is_current_proc_umounted_app()))
+        goto orig_flow;
+
+    {
+        struct inode *inode = ilookup(buf->sb, ino);
+
+        if (!inode) {
+            if (susfs_is_sus_path_ino(buf->sb->s_dev, ino))
+                return 0;
+            goto orig_flow;
+        }
+        if (susfs_is_inode_sus_path(inode)) {
+            iput(inode);
+            return 0;
+        }
+        if (susfs_is_sus_path_ino(buf->sb->s_dev, ino)) {
+            set_bit(AS_FLAGS_SUS_PATH, &inode->i_state);
+            iput(inode);
+            return 0;
+        }
+        iput(inode);
+    }
 orig_flow:
 #endif
 	dirent = buf->current_dir;

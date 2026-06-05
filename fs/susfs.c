@@ -50,6 +50,56 @@ DEFINE_STATIC_SRCU(susfs_srcu_sus_path_loop);
 static DEFINE_MUTEX(susfs_mutex_lock_sus_path);
 static LIST_HEAD(LH_SUS_PATH_LOOP);
 const struct qstr susfs_fake_qstr_name = QSTR_INIT("..5.u.S", 7); // used to re-test the dcache lookup, make sure you don't have file named like this!!
+DEFINE_HASHTABLE(susfs_sus_path_ino_table, SUSFS_SUS_PATH_INO_HASH_BITS);
+EXPORT_SYMBOL(susfs_sus_path_ino_table);
+static DEFINE_SPINLOCK(susfs_sus_path_ino_write_lock);
+
+void susfs_insert_sus_path_ino(dev_t s_dev, unsigned long ino)
+{
+    struct susfs_sus_path_ino_entry *entry;
+    u32 key = (u32)(s_dev ^ ino);
+
+    spin_lock(&susfs_sus_path_ino_write_lock);
+    hlist_for_each_entry_rcu(entry,
+        &susfs_sus_path_ino_table[hash_min(key, SUSFS_SUS_PATH_INO_HASH_BITS)],
+        node) {
+        if (entry->s_dev == s_dev && entry->ino == ino) {
+            spin_unlock(&susfs_sus_path_ino_write_lock);
+            return; /* already registered */
+        }
+    }
+    entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
+    if (!entry) {
+        spin_unlock(&susfs_sus_path_ino_write_lock);
+        pr_err("susfs: susfs_insert_sus_path_ino: out of memory\n");
+        return;
+    }
+    entry->s_dev = s_dev;
+    entry->ino   = ino;
+    hash_add_rcu(susfs_sus_path_ino_table, &entry->node, key);
+    spin_unlock(&susfs_sus_path_ino_write_lock);
+}
+EXPORT_SYMBOL(susfs_insert_sus_path_ino);
+
+bool susfs_is_sus_path_ino(dev_t s_dev, unsigned long ino)
+{
+    struct susfs_sus_path_ino_entry *entry;
+    u32 key = (u32)(s_dev ^ ino);
+    bool found = false;
+
+    rcu_read_lock();
+    hlist_for_each_entry_rcu(entry,
+        &susfs_sus_path_ino_table[hash_min(key, SUSFS_SUS_PATH_INO_HASH_BITS)],
+        node) {
+        if (entry->s_dev == s_dev && entry->ino == ino) {
+            found = true;
+            break;
+        }
+    }
+    rcu_read_unlock();
+    return found;
+}
+EXPORT_SYMBOL(susfs_is_sus_path_ino);
 
 void susfs_add_sus_path(void __user **user_info) {
 	struct st_susfs_sus_path info = {0};
@@ -84,6 +134,7 @@ void susfs_add_sus_path(void __user **user_info) {
 		}
 		set_bit(AS_FLAGS_SUS_PATH, &fi->inode.i_state);
 		set_bit(AS_FLAGS_SUS_PATH, &inode->i_state);
+		susfs_insert_sus_path_ino(fi->inode.i_sb->s_dev, fi->inode.i_ino);
 		SUSFS_LOGI("flagged AS_FLAGS_SUS_PATH on pathname: '%s', fi->nodeid: %llu, fi->inode.i_ino: %lu, fi->inode.i_state: 0x%lx\n", 
 					info.target_pathname, fi->nodeid, fi->inode.i_ino, fi->inode.i_state);
 		info.err = 0;
@@ -91,6 +142,7 @@ void susfs_add_sus_path(void __user **user_info) {
 	}
 
 	set_bit(AS_FLAGS_SUS_PATH, &inode->i_state);
+	susfs_insert_sus_path_ino(inode->i_sb->s_dev, inode->i_ino);
 	SUSFS_LOGI("flagged AS_FLAGS_SUS_PATH on pathname: '%s', ino: '%lu', inode->i_state: 0x%lx\n",
 				info.target_pathname, inode->i_ino, inode->i_state);
 	info.err = 0;
@@ -147,7 +199,7 @@ static void susfs_run_sus_path_loop(void) {
 	int srcu_idx = srcu_read_lock(&susfs_srcu_sus_path_loop);
 
 	list_for_each_entry_rcu(cursor, &LH_SUS_PATH_LOOP, list) {
-		if (!kern_path(cursor->target_pathname, 0, &path))
+		if (!kern_path(cursor->target_pathname, LOOKUP_FOLLOW, &path))
 		{
 			inode = d_backing_inode(path.dentry);
 			if (!inode) {
@@ -164,10 +216,12 @@ static void susfs_run_sus_path_loop(void) {
 				}
 				set_bit(AS_FLAGS_SUS_PATH, &fi->inode.i_state);
 				set_bit(AS_FLAGS_SUS_PATH, &inode->i_state);
+				susfs_insert_sus_path_ino(fi->inode.i_sb->s_dev, fi->inode.i_ino);
 				SUSFS_LOGI("re-flag AS_FLAGS_SUS_PATH on path '%s', fi->inode.i_ino: '%lu', fi->inode.i_state: 0x%lx\n",
 						cursor->target_pathname, fi->inode.i_ino, fi->inode.i_state);
 			} else {
 				set_bit(AS_FLAGS_SUS_PATH, &inode->i_state);
+				susfs_insert_sus_path_ino(inode->i_sb->s_dev, inode->i_ino);
 				SUSFS_LOGI("re-flag AS_FLAGS_SUS_PATH on path '%s', inode->i_ino: '%lu', inode->i_state: 0x%lx\n",
 						cursor->target_pathname, inode->i_ino, inode->i_state);
 			}

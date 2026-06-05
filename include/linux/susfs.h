@@ -39,6 +39,22 @@ enum UID_SCHEME {
 /**********/
 /* sus_path */
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+/*
+ * Persistent (s_dev, ino) hashtable — survives inode eviction.
+ * Reads use RCU (lock-free); writes use spinlock.
+ */
+struct susfs_sus_path_ino_entry {
+    dev_t           s_dev;
+    unsigned long   ino;
+    struct hlist_node node;
+};
+
+#define SUSFS_SUS_PATH_INO_HASH_BITS 8
+extern DECLARE_HASHTABLE(susfs_sus_path_ino_table, SUSFS_SUS_PATH_INO_HASH_BITS);
+
+void susfs_insert_sus_path_ino(dev_t s_dev, unsigned long ino);
+bool susfs_is_sus_path_ino(dev_t s_dev, unsigned long ino);
+
 struct st_susfs_sus_path {
 	char                                    target_pathname[SUSFS_MAX_LEN_PATHNAME];
 	int                                     err;
