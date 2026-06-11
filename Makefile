@@ -701,6 +701,10 @@ endif
 LLVM_AR	:= llvm-ar
 LLVM_NM	:= llvm-nm
 export LLVM_AR LLVM_NM
+
+ifeq ($(ld-name),lld)
+LDFLAGS += --lto-O3
+endif
 endif
 
 # The arch Makefile can set ARCH_{CPP,A,C}FLAGS to override the default
@@ -880,10 +884,6 @@ endif
 # These warnings generated too much noise in a regular build.
 # Use make W=1 to enable them (see scripts/Makefile.extrawarn)
 KBUILD_CFLAGS += $(call cc-disable-warning, unused-but-set-variable)
-
-ifeq ($(ld-name),lld)
-LDFLAGS += --lto-O3
-endif
 
 KBUILD_CFLAGS += $(call cc-disable-warning, unused-const-variable)
 ifdef CONFIG_FRAME_POINTER
