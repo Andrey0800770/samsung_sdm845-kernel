@@ -1,5 +1,5 @@
 /* Copyright (c) 2017-2018,2020, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -825,7 +825,7 @@ void a6xx_preemption_context_destroy(struct kgsl_context *context)
 	struct kgsl_device *device = context->device;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
-	if (!adreno_is_preemption_enabled(adreno_dev))
+	if (!ADRENO_FEATURE(adreno_dev, ADRENO_PREEMPTION))
 		return;
 
 	gpumem_free_entry(context->user_ctxt_record);
@@ -840,7 +840,7 @@ int a6xx_preemption_context_init(struct kgsl_context *context)
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 	uint64_t flags = 0;
 
-	if (!adreno_is_preemption_enabled(adreno_dev))
+	if (!ADRENO_FEATURE(adreno_dev, ADRENO_PREEMPTION))
 		return 0;
 
 	if (context->flags & KGSL_CONTEXT_SECURE)

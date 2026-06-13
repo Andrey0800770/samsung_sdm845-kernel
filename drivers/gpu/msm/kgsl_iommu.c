@@ -1,5 +1,5 @@
 /* Copyright (c) 2011-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -35,12 +35,6 @@
 #include "adreno.h"
 #include "kgsl_trace.h"
 #include "kgsl_pwrctrl.h"
-#if defined(CONFIG_SEC_ABC)
-#include <linux/sti/abc_common.h>
-#endif
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-#include "../drm/msm/samsung/ss_dpui_common.h"
-#endif
 
 #define CP_APERTURE_REG	0
 #define CP_SMMU_APERTURE_ID 0x1B
@@ -232,8 +226,9 @@ static void kgsl_iommu_remove_global(struct kgsl_mmu *mmu,
 static void kgsl_iommu_add_global(struct kgsl_mmu *mmu,
 		struct kgsl_memdesc *memdesc, const char *name)
 {
-	u32 bit, start = 0;
+	u32 bit;
 	u64 size = kgsl_memdesc_footprint(memdesc);
+	int start = 0;
 
 	if (memdesc->gpuaddr != 0)
 		return;
@@ -251,7 +246,7 @@ static void kgsl_iommu_add_global(struct kgsl_mmu *mmu,
 	}
 
 	while (start >= 0) {
-	bit = bitmap_find_next_zero_area(global_map, GLOBAL_MAP_PAGES,
+		bit = bitmap_find_next_zero_area(global_map, GLOBAL_MAP_PAGES,
 			start, size >> PAGE_SHIFT, 0);
 
 		if (bit < GLOBAL_MAP_PAGES)
@@ -918,12 +913,6 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 			else
 				KGSL_LOG_DUMP(ctx->kgsldev, "*EMPTY*\n");
 		}
-#if defined(CONFIG_SEC_ABC)
-		sec_abc_send_event("MODULE=gpu_qc@ERROR=gpu_page_fault");
-#endif
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-			inc_dpui_u32_field(DPUI_KEY_QCT_GPU_PF, 1);
-#endif
 	}
 
 
@@ -953,7 +942,6 @@ static int kgsl_iommu_fault_handler(struct iommu_domain *domain,
 	}
 
 	kgsl_context_put(context);
-
 	return ret;
 }
 
@@ -2104,15 +2092,6 @@ kgsl_iommu_get_current_ttbr0(struct kgsl_mmu *mmu)
 		return 0;
 
 	kgsl_iommu_enable_clk(mmu);
-
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-	if (iommu->ctx[KGSL_IOMMU_CONTEXT_USER].regbase == NULL) {
-		WARN(1, "regbase seems not to be initialzed yet\n");
-		kgsl_iommu_disable_clk(mmu);
-		return 0;
-	}
-#endif
-
 	val = KGSL_IOMMU_GET_CTX_REG_Q(ctx, TTBR0);
 	kgsl_iommu_disable_clk(mmu);
 	return val;
@@ -2460,11 +2439,13 @@ static bool iommu_addr_in_svm_ranges(struct kgsl_iommu_pt *pt,
 		return false;
 
 	if ((gpuaddr >= pt->compat_va_start && gpuaddr < pt->compat_va_end) &&
-		(end > pt->compat_va_start && end <= pt->compat_va_end))
+		(end > pt->compat_va_start &&
+			end <= pt->compat_va_end))
 		return true;
 
 	if ((gpuaddr >= pt->svm_start && gpuaddr < pt->svm_end) &&
-		(end > pt->svm_start && end <= pt->svm_end))
+		(end > pt->svm_start &&
+			end <= pt->svm_end))
 		return true;
 
 	return false;
@@ -2524,7 +2505,7 @@ static int kgsl_iommu_get_gpuaddr(struct kgsl_pagetable *pagetable,
 
 	size = kgsl_memdesc_footprint(memdesc);
 
-	align = 1 << kgsl_memdesc_get_align(memdesc);
+	align = kgsl_get_align(memdesc);
 
 	if (memdesc->flags & KGSL_MEMFLAGS_FORCE_32BIT) {
 		start = pt->compat_va_start;
@@ -2593,20 +2574,21 @@ static int kgsl_iommu_svm_range(struct kgsl_pagetable *pagetable,
 }
 
 static bool kgsl_iommu_addr_in_range(struct kgsl_pagetable *pagetable,
-		uint64_t gpuaddr)
+		uint64_t gpuaddr, uint64_t size)
 {
 	struct kgsl_iommu_pt *pt = pagetable->priv;
 
 	if (gpuaddr == 0)
 		return false;
 
-	if (gpuaddr >= pt->va_start && gpuaddr < pt->va_end)
+	if (gpuaddr >= pt->va_start && (gpuaddr + size) < pt->va_end)
 		return true;
 
-	if (gpuaddr >= pt->compat_va_start && gpuaddr < pt->compat_va_end)
+	if (gpuaddr >= pt->compat_va_start &&
+			(gpuaddr + size) < pt->compat_va_end)
 		return true;
 
-	if (gpuaddr >= pt->svm_start && gpuaddr < pt->svm_end)
+	if (gpuaddr >= pt->svm_start && (gpuaddr + size) < pt->svm_end)
 		return true;
 
 	return false;

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2019, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -661,7 +661,6 @@ void kgsl_device_snapshot(struct kgsl_device *device,
 	 * Overwrite a non-GMU fault snapshot if a GMU fault occurs.
 	 */
 	if (device->snapshot != NULL) {
-		KGSL_DRV_ERR(device, "snapshot: device->snapshot is NULL\n");
 		if (!device->prioritize_unrecoverable ||
 				!device->snapshot->recovered)
 			return;
@@ -677,10 +676,8 @@ void kgsl_device_snapshot(struct kgsl_device *device,
 
 	/* Allocate memory for the snapshot instance */
 	snapshot = kzalloc(sizeof(*snapshot), GFP_KERNEL);
-	if (snapshot == NULL) {
-		KGSL_DRV_ERR(device, "snapshot: allocation failed for snapshot\n");
+	if (snapshot == NULL)
 		return;
-	}
 
 	init_completion(&snapshot->dump_gate);
 	INIT_LIST_HEAD(&snapshot->obj_list);
@@ -1280,11 +1277,8 @@ static void kgsl_snapshot_save_frozen_objs(struct work_struct *work)
 	size_t size = 0;
 	void *ptr;
 
-	KGSL_DRV_ERR(device, "kgsl_snapshot_save_frozen_objs start\n");
-	if (IS_ERR_OR_NULL(device)) {
-		KGSL_DRV_ERR(device, "kgsl_snapshot_save_frozen_objs - device null or error\n");
+	if (IS_ERR_OR_NULL(device))
 		return;
-	}
 
 	if (snapshot->gmu_fault)
 		goto gmu_only;
@@ -1301,6 +1295,11 @@ static void kgsl_snapshot_save_frozen_objs(struct work_struct *work)
 
 	if (size == 0)
 		goto done;
+
+	if (size > device->snapshot_memory.size) {
+		SNAPSHOT_ERR_NOMEM(device, "OBJS");
+		goto done;
+	}
 
 	snapshot->mempool = vmalloc(size);
 

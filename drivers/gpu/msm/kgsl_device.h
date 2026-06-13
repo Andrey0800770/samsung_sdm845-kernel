@@ -420,7 +420,6 @@ struct kgsl_context {
 	unsigned int fault_count;
 	unsigned long fault_time;
 	struct kgsl_mem_entry *user_ctxt_record;
-	u64 timers[3];
 };
 
 #define _context_comm(_c) \
@@ -568,12 +567,6 @@ static inline void kgsl_process_add_stats(struct kgsl_process_private *priv,
 	priv->stats[type].cur += size;
 	if (priv->stats[type].max < priv->stats[type].cur)
 		priv->stats[type].max = priv->stats[type].cur;
-}
-
-static inline void kgsl_process_sub_stats(struct kgsl_process_private *priv,
-	unsigned int type, uint64_t size)
-{
-	priv->stats[type].cur -= size;
 }
 
 static inline bool kgsl_is_register_offset(struct kgsl_device *device,

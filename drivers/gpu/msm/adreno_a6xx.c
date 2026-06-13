@@ -1,4 +1,4 @@
-/* Copyright (c) 2017-2018,2020-2021, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2017-2018,2020 The Linux Foundation. All rights reserved.
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -2286,8 +2286,7 @@ static int a6xx_complete_rpmh_votes(struct kgsl_device *device)
 
 static int a6xx_gmu_suspend(struct kgsl_device *device)
 {
-	/* Max GX clients on A6xx is 2: GMU and KMD */
-	int ret = 0, max_client_num = 2;
+	int ret = 0;
 	struct gmu_device *gmu = &device->gmu;
 	struct adreno_device *adreno_dev = ADRENO_DEVICE(device);
 
@@ -2307,7 +2306,7 @@ static int a6xx_gmu_suspend(struct kgsl_device *device)
 	a6xx_complete_rpmh_votes(device);
 
 	if (gmu->gx_gdsc) {
-		if (regulator_is_enabled(gmu->gx_gdsc)) {
+		if (a6xx_gx_is_on(adreno_dev)) {
 			/* Switch gx gdsc control from GMU to CPU
 			 * force non-zero reference count in clk driver
 			 * so next disable call will turn
@@ -2316,18 +2315,16 @@ static int a6xx_gmu_suspend(struct kgsl_device *device)
 			ret = regulator_enable(gmu->gx_gdsc);
 			if (ret)
 				dev_err(&gmu->pdev->dev,
-					"suspend fail: gx enable\n");
+					"suspend fail: gx enable %d\n", ret);
 
-			while ((max_client_num)) {
-				ret = regulator_disable(gmu->gx_gdsc);
-				if (!regulator_is_enabled(gmu->gx_gdsc))
-					break;
-				max_client_num -= 1;
-			}
-
-			if (!max_client_num)
+			ret = regulator_disable(gmu->gx_gdsc);
+			if (ret)
 				dev_err(&gmu->pdev->dev,
-					"suspend fail: cannot disable gx\n");
+					"suspend fail: gx disable %d\n", ret);
+
+			if (a6xx_gx_is_on(adreno_dev))
+				dev_err(&gmu->pdev->dev,
+					"suspend fail: gx is stuck on\n");
 		}
 	}
 

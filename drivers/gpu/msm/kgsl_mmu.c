@@ -1,5 +1,5 @@
 /* Copyright (c) 2002,2007-2017,2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -24,10 +24,6 @@
 #include "kgsl_mmu.h"
 #include "kgsl_device.h"
 #include "kgsl_sharedmem.h"
-
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-#include <linux/delay.h>
-#endif
 
 static void pagetable_remove_sysfs_objects(struct kgsl_pagetable *pagetable);
 
@@ -400,10 +396,6 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 {
 	int size;
 
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-	int retry_cnt;
-#endif
-
 	if (!memdesc->gpuaddr)
 		return -EINVAL;
 	if (!(memdesc->flags & (KGSL_MEMFLAGS_SPARSE_VIRT |
@@ -420,22 +412,6 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 		int ret;
 
 		ret = pagetable->pt_ops->mmu_map(pagetable, memdesc);
-
-#if defined(CONFIG_DISPLAY_SAMSUNG)
-		if (ret != 0 && !in_interrupt()) {
-			for (retry_cnt = 0; retry_cnt < 62 ; retry_cnt++) {
-				/* To wait free page by memory reclaim*/
-				usleep_range(16000, 16000);
-
-				pr_err("kgsl_mmu_map failed : retry (%d) ret : %d\n", retry_cnt, ret);
-				
-				ret = pagetable->pt_ops->mmu_map(pagetable, memdesc);
-				if (ret == 0)
-					break;
-			}
-		}
-#endif
-
 		if (ret)
 			return ret;
 
@@ -464,7 +440,8 @@ void kgsl_mmu_put_gpuaddr(struct kgsl_memdesc *memdesc)
 	if (memdesc->size == 0 || memdesc->gpuaddr == 0)
 		return;
 
-	if (!kgsl_memdesc_is_global(memdesc) && (KGSL_MEMDESC_MAPPED & memdesc->priv))
+	if (!kgsl_memdesc_is_global(memdesc) &&
+			(KGSL_MEMDESC_MAPPED & memdesc->priv))
 		unmap_fail = kgsl_mmu_unmap(pagetable, memdesc);
 
 	/*
@@ -528,8 +505,6 @@ kgsl_mmu_unmap(struct kgsl_pagetable *pagetable,
 		size = kgsl_memdesc_footprint(memdesc);
 
 		ret = pagetable->pt_ops->mmu_unmap(pagetable, memdesc);
-		if (ret)
-			return ret;
 
 		atomic_dec(&pagetable->stats.entries);
 		atomic_long_sub(size, &pagetable->stats.mapped);
@@ -639,10 +614,11 @@ enum kgsl_mmutype kgsl_mmu_get_mmutype(struct kgsl_device *device)
 EXPORT_SYMBOL(kgsl_mmu_get_mmutype);
 
 bool kgsl_mmu_gpuaddr_in_range(struct kgsl_pagetable *pagetable,
-		uint64_t gpuaddr)
+		uint64_t gpuaddr, uint64_t size)
 {
 	if (PT_OP_VALID(pagetable, addr_in_range))
-		return pagetable->pt_ops->addr_in_range(pagetable, gpuaddr);
+		return pagetable->pt_ops->addr_in_range(pagetable,
+			 gpuaddr, size);
 
 	return false;
 }
@@ -678,7 +654,7 @@ EXPORT_SYMBOL(kgsl_mmu_get_qtimer_global_entry);
  */
 
 static bool nommu_gpuaddr_in_range(struct kgsl_pagetable *pagetable,
-		uint64_t gpuaddr)
+		uint64_t gpuaddr, uint64_t size)
 {
 	return (gpuaddr != 0) ? true : false;
 }
