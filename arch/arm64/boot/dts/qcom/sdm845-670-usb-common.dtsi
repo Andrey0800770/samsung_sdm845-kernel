@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2018, 2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -37,7 +37,6 @@
 		qcom,num-gsi-evt-buffs = <0x3>;
 		qcom,use-pdc-interrupts;
 		qcom,pm-qos-latency = <44>;
-		qcom,disable-host-mode-pm;
 		extcon = <0>, <0>, <&eud>, <0>, <0>;
 
 		clocks = <&clock_gcc GCC_USB30_PRIM_MASTER_CLK>,
@@ -127,11 +126,11 @@
 
 		qcom,efuse-bit-pos = <25>;
 		qcom,efuse-num-bits = <3>;
-		vdd-supply = <&pm8998_l5>; /* ServiceTask#100911 */
+		vdd-supply = <&pm8998_l1>;
 		vdda18-supply = <&pm8998_l12>;
 		vdda33-supply = <&pm8998_l24>;
 		qcom,override-bias-ctrl2;
-		qcom,vdd-voltage-level = <0 800000 800000>;
+		qcom,vdd-voltage-level = <0 880000 880000>;
 		qcom,qusb-phy-reg-offset =
 			<0x240 /* QUSB2PHY_PORT_TUNE1 */
 			 0x1a0 /* QUSB2PHY_PLL_COMMON_STATUS_ONE */
@@ -144,6 +143,8 @@
 			 0x22c /* QUSB2PHY_SQ_CTRL2 */
 			 0x27c /* QUSB2PHY_DEBUG_CTRL1 */
 			 0x280 /* QUSB2PHY_DEBUG_CTRL2 */
+			 0x284 /* QUSB2PHY_DEBUG_CTRL3 */
+			 0x288 /* QUSB2PHY_DEBUG_CTRL4 */
 			 0x2a0>; /* QUSB2PHY_STAT5 */
 
 		qcom,qusb-phy-init-seq =
@@ -182,9 +183,9 @@
 		reg = <0x88e8000 0x3000>;
 		reg-names = "qmp_phy_base";
 
-		vdd-supply = <&pm8998_l5>; /* ServiceTask#100911 */
+		vdd-supply = <&pm8998_l1>;
 		core-supply = <&pm8998_l26>;
-		qcom,vdd-voltage-level = <0 800000 800000>;
+		qcom,vdd-voltage-level = <0 880000 880000>;
 		qcom,vbus-valid-override;
 		qcom,qmp-phy-init-seq =
 		/* <reg_offset, value, delay> */
