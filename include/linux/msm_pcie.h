@@ -198,10 +198,10 @@ static inline int msm_pcie_debug_info(struct pci_dev *dev, u32 option, u32 base,
 
 #ifdef CONFIG_SEC_BSP
 enum l1ss_ctrl_ids {
-	L1SS_SYSFS,
-	L1SS_MST,
-	L1SS_AUDIO,
-	L1SS_MAX
+       L1SS_SYSFS,
+       L1SS_MST,
+       L1SS_AUDIO,
+       L1SS_MAX
 };
 
 int sec_pcie_l1ss_enable(int ctrl_id);
@@ -209,12 +209,12 @@ int sec_pcie_l1ss_disable(int ctrl_id);
 #else
 inline int sec_pcie_l1ss_enable(int ctrl_id)
 {
-	return -ENODEV;
+       return -ENODEV;
 }
 
 inline int sec_pcie_l1ss_disable(int ctrl_id)
 {
-	return -ENODEV;
+       return -ENODEV;
 }
 #endif /* CONFIG_SEC_BSP */
 

@@ -675,6 +675,7 @@ static int ipa_uc_ntn_disconn_pipes(struct ipa_uc_offload_ctx *ntn_ctx)
 		ipa_uc_ntn_free_conn_smmu_info(&ntn_ctx->conn.dl);
 		ipa_uc_ntn_free_conn_smmu_info(&ntn_ctx->conn.ul);
 	}
+
 	return ret;
 }
 

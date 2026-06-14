@@ -95,7 +95,7 @@ int ipa3_get_ntn_stats(struct Ipa3HwStatsNTNInfoData_t *stats)
 	}
 
 	if (!stats || !ipa3_ctx->uc_ntn_ctx.ntn_uc_stats_mmio) {
-		IPAERR("bad parms stats=%pK ntn_stats=%pK\n",
+		IPAERR("bad parms stats=%p ntn_stats=%p\n",
 			stats,
 			ipa3_ctx->uc_ntn_ctx.ntn_uc_stats_mmio);
 		return -EINVAL;
