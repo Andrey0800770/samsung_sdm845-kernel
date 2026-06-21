@@ -2231,20 +2231,18 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	for(;;) {
 		u64 hash_len;
 		int type;
-#ifdef CONFIG_KSU_SUSFS_SUS_PATH
-		struct dentry *dentry;
-#endif
 
-		err = may_lookup(nd);
-		if (err)
-			return err;
 #ifdef CONFIG_KSU_SUSFS_SUS_PATH
-		dentry = nd->path.dentry;
+		struct dentry *dentry = nd->path.dentry;
 		if (dentry->d_inode && susfs_check_and_heal_inode(dentry->d_inode)) {
 			// return -ENOENT here since it is walking the sub path of sus path
 			return -ENOENT;
 		}
 #endif
+
+		err = may_lookup(nd);
+		if (err)
+			return err;
 
 		hash_len = hash_name(nd->path.dentry, name);
 
