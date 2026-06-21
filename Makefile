@@ -798,10 +798,7 @@ KBUILD_CFLAGS   += -pipe -O3
 endif
 
 # Specifies that the code should be optimized for the selected cores
-ifeq ($(cc-name),gcc)
-KBUILD_CFLAGS += -mcpu=cortex-a75 -march=armv8-a
-KBUILD_AFLAGS += -mcpu=cortex-a75 -march=armv8-a
-else ifeq ($(cc-name),clang)
+ifeq ($(cc-name),clang)
 KBUILD_CFLAGS += -mcpu=cortex-a75 -march=armv8-a+crc+crypto
 KBUILD_AFLAGS += -mcpu=cortex-a75 -march=armv8-a+crc+crypto
 
