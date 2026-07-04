@@ -155,6 +155,13 @@ config KSU_SUSFS_SUS_MAP
         - It may not be able to evade detections by apps that implement a good injection detection.
         - Effective only on zygote spawned umounted user app process.
 
+config KSU_SUSFS_SUS_MEMFD
+    bool "Enable to hide or spoof suspicous memfd (experimental)"
+    depends on KSU_SUSFS
+    default n
+    help
+        - Allow preventing the user-defined memfd name from being created
+
 endmenu
 
 endmenu
