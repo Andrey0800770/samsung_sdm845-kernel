@@ -61,6 +61,8 @@ int handle_sepolicy(void __user *user_data, u64 data_len);
 
 void setup_ksu_cred();
 
+void escape_to_root_for_adb_root();
+
 extern u32 ksu_file_sid;
 
 #ifdef CONFIG_KSU_SUSFS
