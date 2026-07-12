@@ -1,4 +1,4 @@
-/* Copyright (c) 2002,2007-2018,2020-2021, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2002,2007-2021, The Linux Foundation. All rights reserved.
  * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -595,7 +595,7 @@ static void kgsl_cma_coherent_free(struct kgsl_memdesc *memdesc)
 				&kgsl_driver.stats.secure);
 
 			kgsl_cma_unlock_secure(memdesc);
-			attrs = (unsigned long)&memdesc->attrs;
+			attrs = memdesc->attrs;
 		} else
 			atomic_long_sub(memdesc->size,
 				&kgsl_driver.stats.coherent);
@@ -1003,6 +1003,7 @@ void kgsl_sharedmem_free(struct kgsl_memdesc *memdesc)
 	if (memdesc->sgt) {
 		sg_free_table(memdesc->sgt);
 		kfree(memdesc->sgt);
+		memdesc->sgt = NULL;
 	}
 
 	if (memdesc->pages)
