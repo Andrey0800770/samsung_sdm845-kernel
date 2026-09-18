@@ -6,6 +6,7 @@
 #include <linux/lockdep.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include "feature/selinux_hide.c"
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
 #include <uapi/linux/sched/types.h>
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
@@ -93,7 +94,7 @@ static inline cpumask_t *ksu_get_current_cpumask_t() { return &current->cpus_all
 
 static int apply_kernelsu_rules_fn(void *ptr)
 {
-	struct policydb *db = (struct policydb *)ptr;
+    struct policydb *db = (struct policydb *)ptr;
 
     ksu_type(db, KERNEL_SU_DOMAIN, "domain");
     ksu_permissive(db, KERNEL_SU_DOMAIN);
@@ -117,33 +118,12 @@ static int apply_kernelsu_rules_fn(void *ptr)
         ksu_allowxperm(db, KERNEL_SU_DOMAIN, ALL, "file", ALL);
     }
 
-    // we need to save allowlist in /data/adb/ksu
-    ksu_allow(db, "kernel", "adb_data_file", "dir", ALL);
-    ksu_allow(db, "kernel", "adb_data_file", "file", ALL);
-    // we need to search /data/app
-    ksu_allow(db, "kernel", "apk_data_file", "file", "open");
-    ksu_allow(db, "kernel", "apk_data_file", "dir", "open");
-    ksu_allow(db, "kernel", "apk_data_file", "dir", "read");
-    ksu_allow(db, "kernel", "apk_data_file", "dir", "search");
-    // we may need to do mount on shell
-    ksu_allow(db, "kernel", "shell_data_file", "file", ALL);
-    // we need to read /data/system/packages.list
-    ksu_allow(db, "kernel", "kernel", "capability", "dac_override");
-    // Android 10+:
-    // http://aospxref.com/android-12.0.0_r3/xref/system/sepolicy/private/file_contexts#512
-    ksu_allow(db, "kernel", "packages_list_file", "file", ALL);
-    // Kernel 4.4
-    ksu_allow(db, "kernel", "packages_list_file", "dir", ALL);
-    // Android 9-:
-    // http://aospxref.com/android-9.0.0_r61/xref/system/sepolicy/private/file_contexts#360
-    ksu_allow(db, "kernel", "system_data_file", "file", ALL);
-    ksu_allow(db, "kernel", "system_data_file", "dir", ALL);
     // our ksud triggered by init
+    ksu_allow(db, "init", KERNEL_SU_DOMAIN, ALL, ALL);
+
+    // restored from https://github.com/tiann/KernelSU/pull/3031
     ksu_allow(db, "init", "adb_data_file", "file", ALL);
     ksu_allow(db, "init", "adb_data_file", "dir", ALL); // #1289
-    ksu_allow(db, "init", KERNEL_SU_DOMAIN, ALL, ALL);
-    // we need to umount modules in zygote
-    ksu_allow(db, "zygote", "adb_data_file", "dir", "search");
 
     // copied from Magisk rules
     // suRights
@@ -166,6 +146,18 @@ static int apply_kernelsu_rules_fn(void *ptr)
     ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "read");
     ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "open");
     ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "fifo_file", "getattr");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "read");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "write");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "connectto");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "getopt");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "unix_stream_socket", "getattr");
+
+    // use memfd created by su domain
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "execute");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "getattr");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "map");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "read");
+    ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "memfd_file", "write");
 
     // bootctl
     ksu_allow(db, "hwservicemanager", KERNEL_SU_DOMAIN, "dir", "search");
@@ -173,17 +165,13 @@ static int apply_kernelsu_rules_fn(void *ptr)
     ksu_allow(db, "hwservicemanager", KERNEL_SU_DOMAIN, "file", "open");
     ksu_allow(db, "hwservicemanager", KERNEL_SU_DOMAIN, "process", "getattr");
 
-    // For mounting loop devices, mirrors, tmpfs
-    ksu_allow(db, "kernel", ALL, "file", "read");
-    ksu_allow(db, "kernel", ALL, "file", "write");
-
     // Allow all binder transactions
     ksu_allow(db, "domain", KERNEL_SU_DOMAIN, "binder", ALL);
 
     // Allow system server kill su process
     ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
     ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
-
+    
     return 0;
 }
 
@@ -350,7 +338,7 @@ static int sepol_require_not_all(const char *value, const char *name)
     return -EINVAL;
 }
 
-static int sepol_expected_argc(u32 cmd)
+int sepol_expected_argc(u32 cmd)
 {
     switch (cmd) {
     case KSU_SEPOLICY_CMD_NORMAL_PERM:
@@ -631,6 +619,7 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 			pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
 		} else {
 			success_cmd_count++;
+            ksu_add_shit_to_list(header.cmd, args);
 		}
 		cmd_index++;
 	}
@@ -707,6 +696,7 @@ static int handle_sepolicy_fn(void *data)
 			pr_err("sepol: cmd #%u failed, cmd=%u subcmd=%u.\n", cmd_index, header.cmd, header.subcmd);
 		else {
 			success_cmd_count++;
+            ksu_add_shit_to_list(header.cmd, args);
 		}
 
 		cmd_index++;

@@ -24,7 +24,7 @@ static u32 cached_zygote_sid __read_mostly = 0;
 static u32 cached_init_sid __read_mostly = 0;
 u32 ksu_file_sid __read_mostly = 0;
 
-static int transive_to_domain(const char *domain, struct cred *cred)
+static int transive_to_domain(const char *domain, struct cred *cred, bool clear_exec_sid)
 {
     struct task_security_struct *tsec;
     u32 sid;
@@ -46,6 +46,9 @@ static int transive_to_domain(const char *domain, struct cred *cred)
         tsec->create_sid = 0;
         tsec->keycreate_sid = 0;
         tsec->sockcreate_sid = 0;
+        if (clear_exec_sid) {
+            tsec->exec_sid = 0;
+        }
     }
     return error;
 }
@@ -75,7 +78,7 @@ is_ksu_transition(const struct task_security_struct *old_tsec,
 
 void setup_selinux(const char *domain, struct cred *cred)
 {
-    if (transive_to_domain(domain, cred)) {
+    if (transive_to_domain(domain, cred, false)) {
         pr_err("transive domain failed.\n");
         return;
     }
@@ -83,7 +86,7 @@ void setup_selinux(const char *domain, struct cred *cred)
 
 void setup_ksu_cred(void)
 {
-    if (ksu_cred && transive_to_domain(KERNEL_SU_CONTEXT, ksu_cred)) {
+    if (ksu_cred && transive_to_domain(KERNEL_SU_CONTEXT, ksu_cred, false)) {
         pr_err("setup ksu cred failed.\n");
     }
 }
@@ -340,3 +343,19 @@ void susfs_set_priv_app_sid(void)
     susfs_set_sid(KERNEL_PRIV_APP_DOMAIN, &susfs_priv_app_sid);
 }
 #endif // #ifdef CONFIG_KSU_SUSFS
+
+void escape_to_root_for_adb_root(void)
+{
+    struct cred *cred = prepare_creds();
+    if (!cred) {
+        pr_err("Failed to prepare adbd's creds!\n");
+        return;
+    }
+
+    if (transive_to_domain(KERNEL_SU_CONTEXT, cred, true)) {
+        pr_err("transive domain failed.\n");
+        abort_creds(cred);
+        return;
+    }
+    commit_creds(cred);
+}
