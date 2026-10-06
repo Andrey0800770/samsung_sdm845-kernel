@@ -25,7 +25,6 @@
 #endif // #ifdef CONFIG_KSU_SUSFS
 #include "selinux/selinux.h"
 #include "feature/sulog.h"
-#include "feature/adb_root.h"
 
 extern void __init ksu_lsm_hook_init(void);
 extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
@@ -38,8 +37,8 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 	ksu_handle_execveat_ksud(fd, filename_ptr, argv, envp, flags);
 	// adb_root must run even after the ksud execve hook is torn down
 	if (filename_ptr && !IS_ERR(*filename_ptr))
-		ksu_adb_root_handle_execve((*filename_ptr)->name,
-                                   (struct user_arg_ptr *)envp);
+		ksu_adb_root_handle_execve_filename(
+			*filename_ptr, (struct user_arg_ptr *)envp);
 	return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp,
 					    flags);
 }
@@ -83,6 +82,11 @@ __attribute__((naked)) int __init kernelsu_init_early(void)
 
 struct cred *ksu_cred;
 bool ksu_late_loaded;
+
+#ifdef MODULE
+bool ksu_bundled = false;
+module_param_named(bundled, ksu_bundled, bool, 0);
+#endif
 
 int __init kernelsu_init(void)
 {
